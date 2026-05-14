@@ -1,0 +1,329 @@
+{
+  "$schema": "./domain_profile.schema.json",
+  "domain": {
+    "name": "adult_content_tags",
+    "version": "1.0.0",
+    "language": "zh",
+    "description": "Adult content tagging ontology for novel/short-story annotation. Covers ~1200 tags across 19 categories organized into 25 frozen namespaces.",
+    "tags": ["adult", "novel-tagging", "BDSM", "sexual-behavior", "nsfw"]
+  },
+
+  "namespace_map": {
+    "body_anatomy": {
+      "label": "身体解剖部位",
+      "description": "Specific body parts/organs referenced in sexual context",
+      "axes": ["anatomy_part", "gender"],
+      "categories": ["身体特征"],
+      "max_depth": 3,
+      "ontology_type_hint": "graph_native"
+    },
+    "body_shape": {
+      "label": "体型特征",
+      "description": "Body shape descriptors (height, build, proportions)",
+      "axes": ["body_proportion", "gender"],
+      "categories": ["身体特征"],
+      "max_depth": 3,
+      "ontology_type_hint": "flat_behavior"
+    },
+    "body_size": {
+      "label": "身体尺寸",
+      "description": "Size-related body descriptors (large/small attributes)",
+      "axes": ["size_dimension", "target_part"],
+      "categories": ["身体特征"],
+      "max_depth": 3,
+      "ontology_type_hint": "flat_behavior"
+    },
+    "body_aesthetic": {
+      "label": "身体审美",
+      "description": "Aesthetic/handsomeness evaluations of body",
+      "axes": ["aesthetic_dimension"],
+      "categories": ["身体特征"],
+      "max_depth": 3,
+      "ontology_type_hint": "flat_behavior"
+    },
+    "body_condition": {
+      "label": "身体状态",
+      "description": "Body conditions/temporary states",
+      "axes": ["condition_type"],
+      "categories": ["身体特征"],
+      "max_depth": 3,
+      "ontology_type_hint": "specialized_behavior"
+    },
+    "body_resp": {
+      "label": "身体反应",
+      "description": "Physiological responses during sexual activity",
+      "axes": ["response_type", "body_part"],
+      "categories": ["身体反应", "药物催情"],
+      "max_depth": 3,
+      "ontology_type_hint": "graph_native"
+    },
+    "sex_act": {
+      "label": "核心性行为",
+      "description": "Core sexual acts and intercourse types",
+      "axes": ["act_type", "position", "intensity"],
+      "categories": ["核心性行为"],
+      "max_depth": 3,
+      "ontology_type_hint": "graph_native"
+    },
+    "play": {
+      "label": "玩法",
+      "description": "Play/scene types, BDSM activities, SM practices",
+      "axes": ["play_type", "intensity"],
+      "categories": ["玩法", "SM倾向"],
+      "max_depth": 3,
+      "ontology_type_hint": "graph_native"
+    },
+    "extreme": {
+      "label": "极端重口",
+      "description": "Extreme/taboo content",
+      "axes": ["extreme_type", "intensity"],
+      "categories": ["极端重口"],
+      "max_depth": 3,
+      "ontology_type_hint": "specialized_behavior"
+    },
+    "role": {
+      "label": "角色身份",
+      "description": "Character roles and identities",
+      "axes": ["role_type", "power_position"],
+      "categories": ["角色身份"],
+      "max_depth": 3,
+      "ontology_type_hint": "graph_native"
+    },
+    "scene": {
+      "label": "场景设定",
+      "description": "Scene/setting descriptors",
+      "axes": ["scene_type", "setting"],
+      "categories": ["场景设定"],
+      "max_depth": 3,
+      "ontology_type_hint": "specialized_behavior"
+    },
+    "toy": {
+      "label": "道具玩具",
+      "description": "Sex toys, tools, equipment",
+      "axes": ["toy_type", "material", "target_body_part"],
+      "categories": ["道具玩具"],
+      "max_depth": 3,
+      "ontology_type_hint": "graph_native"
+    },
+    "mental": {
+      "label": "心理状态",
+      "description": "Mental/emotional states during sexual activity",
+      "axes": ["emotion_type", "mental_state", "self_perception"],
+      "categories": ["心理状态"],
+      "max_depth": 3,
+      "ontology_type_hint": "graph_native"
+    },
+    "clothing": {
+      "label": "服装道具",
+      "description": "Clothing/costume items in sexual context",
+      "axes": ["clothing_type", "coverage"],
+      "categories": ["服装道具"],
+      "max_depth": 3,
+      "ontology_type_hint": "specialized_behavior"
+    },
+    "humiliate": {
+      "label": "凌辱羞辱",
+      "description": "Humiliation/degradation acts and verbal abuse",
+      "axes": ["humiliate_type", "severity"],
+      "categories": ["凌辱羞辱"],
+      "max_depth": 3,
+      "ontology_type_hint": "specialized_behavior"
+    },
+    "taboo_rel": {
+      "label": "禁忌关系",
+      "description": "Taboo/forbidden relationship types",
+      "axes": ["relation_type", "blood_relation"],
+      "categories": ["禁忌关系"],
+      "max_depth": 3,
+      "ontology_type_hint": "graph_native"
+    },
+    "power_rel": {
+      "label": "权力关系",
+      "description": "Power dynamics in sexual relationships",
+      "axes": ["power_type", "relation_dynamic"],
+      "categories": ["权力关系"],
+      "max_depth": 3,
+      "ontology_type_hint": "graph_native"
+    },
+    "group": {
+      "label": "多人/群戏环境",
+      "description": "Group sex configurations and dynamics",
+      "axes": ["group_type", "participant_count"],
+      "categories": ["多人/群戏环境"],
+      "max_depth": 3,
+      "ontology_type_hint": "specialized_behavior"
+    },
+    "sense": {
+      "label": "感官刺激",
+      "description": "Sensory stimulation types",
+      "axes": ["sense_type", "stimulus"],
+      "categories": ["感官刺激"],
+      "max_depth": 3,
+      "ontology_type_hint": "specialized_behavior"
+    },
+    "fetish": {
+      "label": "恋物偏好",
+      "description": "Fetishes and object-focused preferences",
+      "axes": ["fetish_target", "preference_intensity"],
+      "categories": ["恋物偏好", "种族偏好"],
+      "max_depth": 3,
+      "ontology_type_hint": "specialized_behavior"
+    },
+    "pregnancy": {
+      "label": "妊娠相关",
+      "description": "Pregnancy-related content",
+      "axes": ["pregnancy_stage", "context"],
+      "categories": ["妊娠"],
+      "max_depth": 3,
+      "ontology_type_hint": "flat_behavior"
+    },
+    "orientation": {
+      "label": "性取向",
+      "description": "Sexual orientation identifiers",
+      "axes": ["orientation_type"],
+      "categories": ["性取向"],
+      "max_depth": 3,
+      "ontology_type_hint": "flat_behavior"
+    },
+    "ntr": {
+      "label": "NTR/寝取",
+      "description": "Netorare/cheating/infidelity scenarios",
+      "axes": ["ntr_type", "observer_position"],
+      "categories": ["NTR"],
+      "max_depth": 3,
+      "ontology_type_hint": "graph_native"
+    },
+    "meta_style": {
+      "label": "元风格",
+      "description": "Meta-level style and narrative attributes (not taggable content)",
+      "axes": ["style_type"],
+      "categories": [],
+      "max_depth": 3,
+      "ontology_type_hint": "meta_style"
+    },
+    "style": {
+      "label": "风格属性",
+      "description": "Work-level stylistic attributes",
+      "axes": ["style_dimension"],
+      "categories": [],
+      "max_depth": 3,
+      "ontology_type_hint": "meta_style"
+    }
+  },
+
+  "semantic_types": [
+    {"id": "body_anatomy", "label": "身体解剖部位", "description": "Specific body parts/organs"},
+    {"id": "body_shape", "label": "体型特征", "description": "Body shape/proportion descriptors"},
+    {"id": "body_size", "label": "身体尺寸", "description": "Size-related body attributes"},
+    {"id": "body_aesthetic", "label": "身体审美", "description": "Aesthetic body evaluations"},
+    {"id": "body_condition", "label": "身体状态/条件", "description": "Temporary body conditions and states"},
+    {"id": "body_response", "label": "身体反应", "description": "Physiological responses"},
+    {"id": "behavior", "label": "性行为", "description": "Sexual acts and behaviors"},
+    {"id": "mental_state", "label": "心理状态", "description": "Mental/emotional states"},
+    {"id": "character_role", "label": "角色身份", "description": "Character roles and identities"},
+    {"id": "relationship", "label": "关系类型", "description": "Relationship configurations"},
+    {"id": "scene", "label": "场景设定", "description": "Scene/setting descriptors"},
+    {"id": "item", "label": "道具物品", "description": "Sex toys, tools, items"},
+    {"id": "orientation", "label": "性取向", "description": "Sexual orientation identifiers"},
+    {"id": "fetish_type", "label": "恋物类型", "description": "Fetish and preference types"},
+    {"id": "intensity", "label": "强度/程度", "description": "Intensity or severity indicators"},
+    {"id": "style", "label": "风格属性", "description": "Style/meta attributes"}
+  ],
+
+  "ontology_type_rules": {
+    "flat_behavior": {
+      "type_dominant_ratio_min": 0.80,
+      "tag_count_min": 20,
+      "description": "A single semantic dimension dominates. Low structural complexity."
+    },
+    "specialized_behavior": {
+      "type_dominant_ratio_min": 0.60,
+      "type_dominant_ratio_max": 0.80,
+      "tag_count_min": 10,
+      "description": "Primary dimension with sub-structuring, moderate complexity."
+    },
+    "graph_native": {
+      "type_dominant_ratio_max": 0.60,
+      "tag_count_min": 10,
+      "dimension_count_min": 3,
+      "description": "Multiple balanced semantic dimensions. High dimensional complexity."
+    },
+    "meta_style": {
+      "tag_count_max": 10,
+      "meta_style_ratio_min": 0.50,
+      "description": "Meta-level attributes, not content tags. Few tags, style-dominant."
+    }
+  },
+
+  "alias_policy": {
+    "merge_threshold": 0.90,
+    "auto_accept_threshold": 0.85,
+    "review_threshold": 0.70,
+    "max_aliases_per_entry": 10,
+    "forbidden_merges": [
+      ["足控", "腿控"],
+      ["男同", "男男"],
+      ["母乳", "乳汁"],
+      ["乳汁", "泌乳"]
+    ],
+    "conservative_merges": true
+  },
+
+  "retrieval_facets": {
+    "primary_facets": ["namespace", "category", "semantic_type"],
+    "facet_fields": {
+      "namespace": "namespace",
+      "category": "category",
+      "semantic_type": "semantic_type",
+      "ontology_type": "ontology_type"
+    },
+    "embedding_model": "bge-large-zh-v1.5",
+    "embedding_dim": 1024,
+    "max_embedding_chars": 500,
+    "min_embedding_chars": 50,
+    "target_embedding_chars": 150
+  },
+
+  "confidence_thresholds": {
+    "auto_accept": 0.85,
+    "needs_review": 0.70,
+    "reject": 0.60,
+    "target_mean": 0.85,
+    "target_distribution": {
+      "tier_95_plus": "60-80%",
+      "tier_85_94": "15-30%",
+      "tier_70_84": "2-8%",
+      "tier_below_70": "0-2%"
+    }
+  },
+
+  "relation_policy": {
+    "trusted_types": ["specialization_of", "role_pair", "opposite_of", "context_of"],
+    "experimental_types": [],
+    "max_relations_per_entry": 5,
+    "min_relation_confidence": 0.85,
+    "cross_namespace_relations": true
+  },
+
+  "id_convention": {
+    "format": "namespace.descriptor[.detail]",
+    "max_depth": 3,
+    "language": "en",
+    "separator": ".",
+    "case": "snake_case",
+    "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+  },
+
+  "pipeline": {
+    "stages": [
+      {"id": "s1", "name": "Inventory Triage", "owner": "script", "auto": true},
+      {"id": "s2", "name": "Semantic Normalization", "owner": "flash", "auto": false, "batch_size": 50},
+      {"id": "s3", "name": "Namespace Architecture", "owner": "pro", "auto": false},
+      {"id": "s4", "name": "Canonical ID Freeze", "owner": "flash+pro", "auto": false, "batch_size": 50},
+      {"id": "s5", "name": "Alias Collapse", "owner": "flash+pro", "auto": false, "batch_size": 100},
+      {"id": "s6", "name": "Validation & Audit", "owner": "script", "auto": true},
+      {"id": "s7", "name": "Retrieval Export", "owner": "script", "auto": true},
+      {"id": "s8", "name": "Production Freeze", "owner": "pro", "auto": false}
+    ]
+  }
+}

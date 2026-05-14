@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+
+# Virtualenv
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Ontology Factory — runtime artifacts
+work/
+exports/*
+!exports/.gitkeep
+
+# Secrets
+*.key
+.env
+
+# OS
+.DS_Store
+Thumbs.db

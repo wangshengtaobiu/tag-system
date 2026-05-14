@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-factory.local/domain_profile.schema.json",
+  "title": "Ontology Factory Domain Profile",
+  "description": "Schema for domain profile configuration. This is the ONLY domain-specific file needed to adapt the Factory to a new domain.",
+  "type": "object",
+  "required": ["domain", "namespaces", "semantic_types", "ontology_type_rules", "alias_policy", "retrieval_facets"],
+  "properties": {
+    "domain": {
+      "type": "object",
+      "required": ["name", "version", "language", "description"],
+      "properties": {
+        "name": {"type": "string", "description": "Domain identifier (snake_case)"},
+        "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+        "language": {"type": "string", "enum": ["zh", "en", "ja", "mixed"]},
+        "description": {"type": "string", "maxLength": 500},
+        "inherited_from": {"type": "string", "description": "Parent domain profile if this extends another"},
+        "tags": {"type": "array", "items": {"type": "string"}, "description": "Search/discovery tags"}
+      }
+    },
+
+    "namespace_map": {
+      "type": "object",
+      "description": "Map namespace_id → namespace definition. Max 30 namespaces total.",
+      "maxProperties": 30,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["label", "axes", "categories"],
+        "properties": {
+          "label": {"type": "string", "description": "Human-readable Chinese name"},
+          "description": {"type": "string", "maxLength": 300},
+          "axes": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "description": "Semantic axes this namespace covers"
+          },
+          "categories": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Raw categories that map to this namespace"
+          },
+          "max_depth": {"type": "integer", "minimum": 1, "maximum": 3, "default": 3},
+          "ontology_type_hint": {
+            "type": "string",
+            "enum": ["flat_behavior", "specialized_behavior", "graph_native", "meta_style", "any"]
+          },
+          "frozen": {"type": "boolean", "default": false}
+        }
+      }
+    },
+
+    "semantic_types": {
+      "type": "array",
+      "description": "Allowed semantic types for Flash classification. 5-20 types.",
+      "minItems": 5,
+      "maxItems": 25,
+      "items": {
+        "type": "object",
+        "required": ["id", "label"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "label": {"type": "string"},
+          "description": {"type": "string", "maxLength": 200},
+          "parent_type": {"type": "string"},
+          "sub_types": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+
+    "ontology_type_rules": {
+      "type": "object",
+      "required": ["flat_behavior", "specialized_behavior", "graph_native", "meta_style"],
+      "properties": {
+        "flat_behavior": {
+          "type": "object",
+          "properties": {
+            "type_dominant_ratio_min": {"type": "number", "default": 0.80},
+            "tag_count_min": {"type": "integer", "default": 20},
+            "description": {"type": "string"}
+          }
+        },
+        "specialized_behavior": {
+          "type": "object",
+          "properties": {
+            "type_dominant_ratio_min": {"type": "number", "default": 0.60},
+            "type_dominant_ratio_max": {"type": "number", "default": 0.80},
+            "tag_count_min": {"type": "integer", "default": 10},
+            "description": {"type": "string"}
+          }
+        },
+        "graph_native": {
+          "type": "object",
+          "properties": {
+            "type_dominant_ratio_max": {"type": "number", "default": 0.60},
+            "tag_count_min": {"type": "integer", "default": 10},
+            "dimension_count_min": {"type": "integer", "default": 3},
+            "description": {"type": "string"}
+          }
+        },
+        "meta_style": {
+          "type": "object",
+          "properties": {
+            "tag_count_max": {"type": "integer", "default": 10},
+            "meta_style_ratio_min": {"type": "number", "default": 0.50},
+            "description": {"type": "string"}
+          }
+        }
+      }
+    },
+
+    "alias_policy": {
+      "type": "object",
+      "required": ["merge_threshold", "auto_accept_threshold", "review_threshold", "max_aliases_per_entry"],
+      "properties": {
+        "merge_threshold": {
+          "type": "number",
+          "minimum": 0.80,
+          "maximum": 1.0,
+          "default": 0.90,
+          "description": "Confidence threshold above which auto-merge aliases"
+        },
+        "auto_accept_threshold": {
+          "type": "number",
+          "minimum": 0.80,
+          "maximum": 1.0,
+          "default": 0.85,
+          "description": "Confidence threshold above which auto-accept normalization"
+        },
+        "review_threshold": {
+          "type": "number",
+          "minimum": 0.60,
+          "maximum": 0.85,
+          "default": 0.70,
+          "description": "Confidence below which always needs human review"
+        },
+        "max_aliases_per_entry": {"type": "integer", "minimum": 3, "maximum": 20, "default": 10},
+        "forbidden_merges": {
+          "type": "array",
+          "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string"}},
+          "description": "Pairs of tags that must never be merged (distinct concepts)"
+        },
+        "conservative_merges": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, default to NOT merging (false merge > duplicate survival)"
+        }
+      }
+    },
+
+    "retrieval_facets": {
+      "type": "object",
+      "required": ["primary_facets", "facet_fields"],
+      "properties": {
+        "primary_facets": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Primary facet dimensions for retrieval pre-filtering"
+        },
+        "facet_fields": {
+          "type": "object",
+          "description": "Map facet name → source field in ontology entry",
+          "additionalProperties": {"type": "string"}
+        },
+        "embedding_model": {"type": "string", "default": "bge-large-zh-v1.5"},
+        "embedding_dim": {"type": "integer", "default": 1024},
+        "max_embedding_chars": {"type": "integer", "default": 500},
+        "min_embedding_chars": {"type": "integer", "default": 50},
+        "target_embedding_chars": {"type": "integer", "default": 150}
+      }
+    },
+
+    "confidence_thresholds": {
+      "type": "object",
+      "properties": {
+        "auto_accept": {"type": "number", "default": 0.85},
+        "needs_review": {"type": "number", "default": 0.70},
+        "reject": {"type": "number", "default": 0.60},
+        "target_mean": {"type": "number", "default": 0.85},
+        "target_distribution": {
+          "type": "object",
+          "properties": {
+            "tier_95_plus": {"type": "string", "default": "60-80%"},
+            "tier_85_94": {"type": "string", "default": "15-30%"},
+            "tier_70_84": {"type": "string", "default": "2-8%"},
+            "tier_below_70": {"type": "string", "default": "0-2%"}
+          }
+        }
+      }
+    },
+
+    "relation_policy": {
+      "type": "object",
+      "required": ["trusted_types", "max_relations_per_entry"],
+      "properties": {
+        "trusted_types": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["specialization_of", "role_pair", "opposite_of", "context_of"],
+          "maxItems": 4
+        },
+        "experimental_types": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": [],
+          "description": "Never included in frozen output"
+        },
+        "max_relations_per_entry": {"type": "integer", "default": 5},
+        "min_relation_confidence": {"type": "number", "default": 0.85},
+        "cross_namespace_relations": {"type": "boolean", "default": true}
+      }
+    },
+
+    "id_convention": {
+      "type": "object",
+      "required": ["format", "max_depth", "language", "separator", "pattern"],
+      "properties": {
+        "format": {"type": "string", "default": "namespace.descriptor[.detail]"},
+        "max_depth": {"type": "integer", "default": 3, "minimum": 2, "maximum": 3},
+        "language": {"type": "string", "default": "en", "enum": ["en"]},
+        "separator": {"type": "string", "default": "."},
+        "case": {"type": "string", "default": "snake_case", "enum": ["snake_case"]},
+        "pattern": {"type": "string", "default": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"}
+      }
+    },
+
+    "pipeline": {
+      "type": "object",
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "owner"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^s[1-8]$"},
+              "name": {"type": "string"},
+              "owner": {"type": "string", "enum": ["script", "flash", "pro", "flash+pro"]},
+              "batch_size": {"type": "integer", "default": 50},
+              "max_retries": {"type": "integer", "default": 3},
+              "timeout_seconds": {"type": "integer", "default": 300},
+              "rate_limit_delay": {"type": "number", "default": 1.0},
+              "auto": {"type": "boolean"},
+              "gate": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "domain": {
+        "name": "adult_content_tags",
+        "version": "1.0.0",
+        "language": "zh",
+        "description": "Adult content tagging ontology for novel annotation"
+      },
+      "namespace_map": {
+        "body_anatomy": {
+          "label": "身体解剖",
+          "axes": ["anatomy_part", "gender"],
+          "categories": ["身体特征"],
+          "ontology_type_hint": "graph_native"
+        }
+      },
+      "semantic_types": [
+        {"id": "body_anatomy", "label": "身体解剖部位"},
+        {"id": "behavior", "label": "性行为"}
+      ],
+      "ontology_type_rules": {
+        "flat_behavior": {"type_dominant_ratio_min": 0.80, "tag_count_min": 20},
+        "graph_native": {"type_dominant_ratio_max": 0.60, "tag_count_min": 10, "dimension_count_min": 3}
+      },
+      "alias_policy": {
+        "merge_threshold": 0.90,
+        "auto_accept_threshold": 0.85,
+        "review_threshold": 0.70,
+        "max_aliases_per_entry": 10,
+        "forbidden_merges": []
+      },
+      "retrieval_facets": {
+        "primary_facets": ["namespace", "category", "semantic_type"]
+      }
+    }
+  ]
+}

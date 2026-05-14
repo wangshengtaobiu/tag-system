@@ -1,0 +1,183 @@
+# =============================================================================
+# Ontology Factory — Production Configuration
+# Version: 1.0.0
+# Status: FROZEN (F1-F10 invariants)
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Factory Identity
+# ---------------------------------------------------------------------------
+factory:
+  name: "Ontology Factory"
+  version: "1.0.0"
+  architecture: "router_v3_lite"
+  invariants: ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10"]
+
+# ---------------------------------------------------------------------------
+# Model Routing
+#   pro:    Architect model — for semantic judgment, namespace design, final review
+#   flash:  Worker model — for batch normalization, duplicate detection, confidence
+# ---------------------------------------------------------------------------
+models:
+  pro:
+    provider: "deepseek"
+    model: "deepseek-v4"
+    api_base: "${DEEPSEEK_API_BASE:-https://api.deepseek.com/v1}"
+    api_key: "${DEEPSEEK_API_KEY}"
+    temperature: 0
+    max_tokens: 4096
+    timeout: 300
+    usage: "architect_review_only"
+
+  flash:
+    provider: "deepseek"
+    model: "deepseek-v4-flash"
+    api_base: "${DEEPSEEK_API_BASE:-https://api.deepseek.com/v1}"
+    api_key: "${DEEPSEEK_API_KEY}"
+    temperature: 0
+    max_tokens: 2048
+    timeout: 300
+    usage: "batch_normalization"
+
+# ---------------------------------------------------------------------------
+# Pipeline Stage Configuration
+# ---------------------------------------------------------------------------
+pipeline:
+  stages:
+    s1_triage:
+      name: "Inventory Triage"
+      owner: "script"
+      auto: true
+      batch_size: null
+      max_retries: 1
+      timeout: 60
+
+    s2_normalize:
+      name: "Semantic Normalization"
+      owner: "flash"
+      auto: false
+      batch_size: 50
+      min_batch: 10
+      max_retries: 3
+      timeout: 300
+      rate_limit_delay: 1.0
+      degrade_on_failure: true
+
+    s3_namespace:
+      name: "Namespace Architecture"
+      owner: "pro"
+      auto: false
+      batch_size: null
+      max_retries: 2
+      timeout: 600
+
+    s4_freeze_id:
+      name: "Canonical ID Freeze"
+      owner: "flash+pro"
+      auto: false
+      batch_size: 50
+      max_retries: 2
+      timeout: 300
+
+    s5_alias:
+      name: "Alias Collapse"
+      owner: "flash+pro"
+      auto: false
+      batch_size: 100
+      max_retries: 2
+      timeout: 300
+
+    s6_validate:
+      name: "Validation & Audit"
+      owner: "script"
+      auto: true
+      batch_size: null
+      max_retries: 1
+      timeout: 120
+
+    s7_retrieval:
+      name: "Retrieval Export"
+      owner: "script"
+      auto: true
+      batch_size: null
+      max_retries: 1
+      timeout: 60
+
+    s8_freeze:
+      name: "Production Freeze"
+      owner: "pro"
+      auto: false
+      batch_size: null
+      max_retries: 1
+      timeout: 120
+
+# ---------------------------------------------------------------------------
+# Confidence Thresholds (FROZEN — DO NOT MODIFY without re-benchmarking)
+# ---------------------------------------------------------------------------
+confidence:
+  auto_accept: 0.85       # >= this: accept without review
+  needs_review: 0.70      # < auto_accept && >= needs_review: flag for review
+  reject: 0.60            # < this: reject, requires manual re-normalization
+  merge_auto: 0.95        # >= this: auto-merge confirmed aliases
+  merge_review: 0.90      # >= this && < merge_auto: flag for Pro review
+  target_mean: 0.85       # Target overall mean confidence
+  target_distribution:
+    tier_95_plus:   "60-80%"
+    tier_85_94:     "15-30%"
+    tier_70_84:     "2-8%"
+    tier_below_70:  "0-2%"
+
+# ---------------------------------------------------------------------------
+# ID Convention (FROZEN)
+# ---------------------------------------------------------------------------
+id_convention:
+  format: "namespace.descriptor[.detail]"
+  max_depth: 3
+  language: "en"
+  case: "snake_case"
+  separator: "."
+  pattern: "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+
+# ---------------------------------------------------------------------------
+# Alias Policy
+# ---------------------------------------------------------------------------
+alias_policy:
+  conservative_merge: true       # Default: DON'T merge (false merge > duplicate survival)
+  max_aliases_per_entry: 10
+  no_alias_loops: true           # Alias must never point to another alias
+  audit_sample_rate: 0.20        # Audit 20% of auto-merged aliases
+
+# ---------------------------------------------------------------------------
+# Relation Policy (FROZEN)
+# ---------------------------------------------------------------------------
+relation_policy:
+  trusted_types:
+    - specialization_of
+    - role_pair
+    - opposite_of
+    - context_of
+  experimental_types: []         # NEVER included in frozen output
+  max_relations_per_entry: 5
+  min_relation_confidence: 0.85
+
+# ---------------------------------------------------------------------------
+# Versioning
+# ---------------------------------------------------------------------------
+versioning:
+  export_prefix: "ontology"
+  freeze_manifest: "freeze_manifest.json"
+  migration_map: "migration_map.json"
+  deprecated_ids: "deprecated_ids.json"
+  keep_versions: 5               # Keep last N versions
+
+# ---------------------------------------------------------------------------
+# Review Queue
+# ---------------------------------------------------------------------------
+review_queue:
+  max_batch_size: 20             # Items per review session
+  auto_escalate_after_hours: 48  # Auto-escalate unreviewed items
+  severity_levels:
+    - critical     # Blocking: duplicate IDs, namespace violations
+    - high         # High priority: low confidence, parent cycles
+    - medium       # Normal: namespace conflicts, semantic type mismatch
+    - low          # Advisory: suggestions for improvement
