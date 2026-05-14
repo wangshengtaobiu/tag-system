@@ -8,6 +8,7 @@ tag_acquisition/          # Part 1: Pixiv 采集 + AI 初洗（待完善）
 ontology_factory/         # Part 2: 本体冻结与标准化
     ↓ ontology_export_v1.json
 tagger/                   # Part 3: 本地模型打标（待完善）
+```
 
 ## 模块
 
