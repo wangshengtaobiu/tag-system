@@ -174,42 +174,6 @@ def count_duplicate_cids(entries: list[dict]) -> dict[str, int]:
     return {c: n for c, n in cids.items() if n > 1}
 
 
-def check_parent_cycles(entries: list[dict]) -> list[tuple[str, list[str]]]:
-    """Detect cycles in parent graph. Returns list of (name, cycle_path)."""
-    parent_map = {e.get("name", e.get("original_name", "")): e.get("parent_canonical_id")
-                  for e in entries}
-    cycles = []
-    for name in parent_map:
-        visited = []
-        current = name
-        while current and current in parent_map:
-            if current in visited:
-                cycle_start = visited.index(current)
-                cycles.append((name, visited[cycle_start:] + [current]))
-                break
-            visited.append(current)
-            current = parent_map[current]
-            if len(visited) > MAX_CANONICAL_ID_DEPTH + 2:
-                break
-    return cycles
-
-
-def compute_confidence_distribution(entries: list[dict]) -> dict[str, int]:
-    """Bin entries by confidence tiers."""
-    bins = {"0.95+": 0, "0.85-0.94": 0, "0.70-0.84": 0, "<0.70": 0}
-    for e in entries:
-        c = e.get("confidence", 0)
-        if c >= 0.95:
-            bins["0.95+"] += 1
-        elif c >= 0.85:
-            bins["0.85-0.94"] += 1
-        elif c >= 0.70:
-            bins["0.70-0.84"] += 1
-        else:
-            bins["<0.70"] += 1
-    return bins
-
-
 def build_semantic_summary(entry: dict) -> str:
     """Build short semantic summary for search display."""
     definition = entry.get("definition", "")[:100]

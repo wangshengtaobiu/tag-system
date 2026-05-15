@@ -31,6 +31,13 @@ class S8Freeze(BaseStage):
         t0 = time.time()
         result = StageResult(stage_id=self.stage_id, status=StageStatus.RUNNING)
 
+        # Guard: no data to freeze
+        if len(self.ctx.normalized_entries) == 0:
+            result.status = StageStatus.FAILED
+            result.errors.append("No normalized entries to freeze. Run S1-S5 first.")
+            print("[S8] GATE FAILED: zero normalized entries")
+            return result
+
         # Verify all previous stages passed
         for sid in ["s1", "s2", "s3", "s4", "s5", "s6", "s7"]:
             if sid in self.ctx.stage_results:

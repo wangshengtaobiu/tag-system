@@ -62,7 +62,6 @@ class S1Triage(BaseStage):
                 "distinction": tag.get("distinction") or tag.get("区别") or "",
                 "parent_name": tag.get("parent_name") or tag.get("上位tag") or "",
                 "examples": self._extract_examples(tag),
-                "heat": tag.get("heat") or tag.get("热度") or 0,
             }
             cleaned.append(entry)
 

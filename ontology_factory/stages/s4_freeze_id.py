@@ -26,6 +26,40 @@ class S4FreezeID(BaseStage):
         super().__init__(ctx)
         self.architect_fixes: dict[str, dict] = {}  # tag_name → fix dict
         self.true_aliases: dict[str, str] = {}       # alias_name → primary_name
+        self._load_fixes()
+        self._load_aliases()
+
+    def _load_fixes(self):
+        """Load architect fixes from work_dir/architect_fixes.json if exists."""
+        path = self.ctx.work_dir / "architect_fixes.json"
+        if path.exists():
+            try:
+                data = self._load_json(path)
+                self.architect_fixes = data if isinstance(data, dict) else {}
+                print(f"[S4] Loaded {len(self.architect_fixes)} architect fixes from {path}")
+            except Exception as e:
+                print(f"[S4] WARN: Failed to load architect fixes: {e}")
+
+    def _load_aliases(self):
+        """Load confirmed aliases from work_dir/confirmed_aliases.json if exists."""
+        path = self.ctx.work_dir / "confirmed_aliases.json"
+        if path.exists():
+            try:
+                data = self._load_json(path)
+                # Expect dict format: alias_name → primary_name
+                if isinstance(data, dict):
+                    self.true_aliases = data
+                elif isinstance(data, list):
+                    # Support list of {alias, primary} objects
+                    for item in data:
+                        if isinstance(item, dict):
+                            alias = item.get("alias") or item.get("name")
+                            primary = item.get("primary") or item.get("target")
+                            if alias and primary:
+                                self.true_aliases[alias] = primary
+                print(f"[S4] Loaded {len(self.true_aliases)} confirmed aliases from {path}")
+            except Exception as e:
+                print(f"[S4] WARN: Failed to load confirmed aliases: {e}")
 
     def register_fix(self, tag_name: str, fix: dict):
         """Register an architect fix for a specific tag."""

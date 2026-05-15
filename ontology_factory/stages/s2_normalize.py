@@ -151,51 +151,28 @@ class S2Normalize(BaseStage):
         ns_list = "\n".join(f"  - {ns}" for ns in sorted(self.valid_namespaces))
         st_list = "\n".join(f"  - {st}" for st in sorted(self.valid_semantic_types))
 
-        return f"""You are a tag ontology normalization system. Your role is MECHANICAL only.
+        return f"""You are a tag ontology normalization system for Chinese adult content tags.
 
-## Domain: Adult Content Tags
-
-### Allowed Namespaces (MUST use one of these):
+### Allowed Namespaces (pick exactly one per tag):
 {ns_list}
 
-### Allowed Semantic Types (MUST use one of these):
+### Allowed Semantic Types (pick exactly one per tag):
 {st_list}
 
-### Canonical ID Format:
-- Format: namespace.descriptor[.detail]
-- snake_case, English identifiers
-- Max 3 segments (depth ≤ 3)
-- First segment MUST be a valid namespace
+### Rules:
+- canonical_id: format "namespace.descriptor" or "namespace.descriptor.detail" (snake_case, English, max 3 segments)
+- namespace MUST be from the allowed list above
+- semantic_type MUST be from the allowed list above
+- aliases: list of alternative names for the SAME concept
+- possible_duplicates: other tags in this batch that mean the SAME concept
+- parent_canonical_id: parent entry's canonical_id, or null
+- relation_candidates: only use types [specialization_of, role_pair, opposite_of, context_of]
+- confidence: 0.0-1.0
+- If confidence < 0.85, set needs_review=true with review_reason
 
-### Trusted Relation Types (ONLY these 4):
-- specialization_of
-- role_pair
-- opposite_of
-- context_of
-
-### Your Task:
-For each tag, output:
-1. canonical_id: namespace.descriptor (snake_case, English)
-2. normalized_name: cleaned original name
-3. namespace: one of the allowed namespaces
-4. semantic_type: one of the allowed semantic types
-5. category: original category
-6. aliases: alternative names (same concept, different wording)
-7. possible_duplicates: tags in this batch that mean the SAME concept
-8. parent_canonical_id: parent in hierarchy (can be null)
-9. relation_candidates: TRUSTED relation types only
-10. confidence: 0.0-1.0 score
-11. needs_review: true if confidence < 0.85 OR ambiguous
-12. review_reason: explanation if needs_review is true
-
-### CONSTRAINTS:
-- Do NOT design new namespaces
-- Do NOT invent relation types
-- Do NOT merge tags (only flag as possible_duplicates)
-- Confidence < 0.85 → needs_review must be True
-- Be conservative: false merge is worse than duplicate survival
-
-Output ONLY a JSON array of tag objects. No markdown, no explanation."""
+### Output:
+Return ONLY a JSON array. Each element must have: canonical_id, name, namespace, semantic_type, category, aliases, possible_duplicates, parent_canonical_id, relation_candidates, confidence, needs_review, review_reason.
+No markdown, no explanation, no wrapping text."""
 
     def _call_flash(self, batch_json: str, retry: int = 0) -> dict | None:
         """Call Flash API with retry logic."""
@@ -206,7 +183,7 @@ Output ONLY a JSON array of tag objects. No markdown, no explanation."""
                 {"role": "user", "content": batch_json},
             ],
             "temperature": 0,
-            "max_tokens": 2048,
+            "max_tokens": 8192,
         }
         headers = {
             "Authorization": f"Bearer {self.api_key}",

@@ -12,6 +12,9 @@ venv/
 .vscode/
 .idea/
 
+# Qoder
+.qoder/
+
 # Ontology Factory — runtime artifacts
 work/
 exports/*

@@ -56,8 +56,8 @@ pipeline:
       name: "Semantic Normalization"
       owner: "flash"
       auto: false
-      batch_size: 50
-      min_batch: 10
+      batch_size: 10
+      min_batch: 5
       max_retries: 3
       timeout: 300
       rate_limit_delay: 1.0

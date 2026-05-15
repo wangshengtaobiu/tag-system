@@ -96,6 +96,37 @@ class S5Alias(BaseStage):
                 else:
                     rejected += 1
 
+        # Also process alias candidates from review_queue
+        for item in self.ctx.review_queue:
+            if getattr(item, "review_type", None) == "alias_risk" or (
+                isinstance(item, dict) and item.get("review_type") == "alias_risk"
+            ):
+                alias_name = getattr(item, "tag_name", None) or (
+                    item.get("tag_name") if isinstance(item, dict) else None
+                )
+                ctx_data = getattr(item, "context", None) or (
+                    item.get("context") if isinstance(item, dict) else {}
+                )
+                primary_name = ctx_data.get("primary_name") if isinstance(ctx_data, dict) else None
+                conf = getattr(item, "confidence", 0.5) or (
+                    item.get("confidence", 0.5) if isinstance(item, dict) else 0.5
+                )
+
+                if not alias_name or not primary_name:
+                    continue
+                if (primary_name, alias_name) in forbidden_set:
+                    rejected += 1
+                    continue
+                if conf >= self.merge_threshold:
+                    alias_graph[alias_name] = primary_name
+                    for e2 in entries:
+                        if e2.get("name") == alias_name or e2.get("original_name") == alias_name:
+                            e2["is_duplicate_of"] = primary_name
+                            break
+                    auto_merged += 1
+                else:
+                    review_flagged += 1
+
         # Save alias graph
         alias_data = {
             "meta": {

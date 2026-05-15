@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -27,7 +28,7 @@ from pathlib import Path
 # Add factory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from stages import PipelineContext, STAGE_REGISTRY
+from stages import PipelineContext, STAGE_REGISTRY, StageResult, StageStatus
 from stages.s1_triage import S1Triage
 from stages.s2_normalize import S2Normalize
 from stages.s3_namespace import S3Namespace
@@ -67,10 +68,17 @@ def load_config(config_path: str | None = None) -> dict:
         except ImportError:
             print("[WARN] PyYAML not installed. Trying json fallback...")
 
-    # Fallback: try as JSON first, then YAML via literal read
+    # Fallback: try as JSON first, then YAML
     cfg_path = Path("config/factory_config.yaml")
     if cfg_path.exists():
         try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            return _expand_env_vars(raw)
+        except (json.JSONDecodeError, Exception):
+            pass
+        try:
+            import yaml
             with open(cfg_path, "r", encoding="utf-8") as f:
                 raw = yaml.safe_load(f)
             return _expand_env_vars(raw)
@@ -86,25 +94,20 @@ def load_profile(profile_path: str) -> dict:
 
 
 def load_raw_tags(input_path: str) -> list[dict]:
-    """Load raw tags from JSON or CSV."""
+    """Load raw tags from JSON."""
     path = Path(input_path)
-    if path.suffix == ".json":
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            return data.get("tags") or data.get("entries") or data.get("data") or []
-    elif path.suffix == ".csv":
-        import csv
-        with open(path, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            return [row for row in reader]
-    else:
-        raise ValueError(f"Unsupported input format: {path.suffix}")
+    if path.suffix != ".json":
+        raise ValueError(f"Unsupported input format: {path.suffix}, only JSON is supported")
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return data.get("tags") or data.get("entries") or data.get("data") or []
+    return []
 
 
-def run_pipeline(ctx: PipelineContext, start_stage: str = "s1", end_stage: str = "s8") -> bool:
+def run_pipeline(ctx: PipelineContext, config: dict, start_stage: str = "s1", end_stage: str = "s8") -> bool:
     """Run the pipeline from start_stage to end_stage."""
     stage_order = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"]
     stage_map = {
@@ -130,6 +133,15 @@ def run_pipeline(ctx: PipelineContext, start_stage: str = "s1", end_stage: str =
         if stage_cls is None:
             continue
 
+        # Check if stage is disabled by config (e.g. --skip-flash)
+        stage_config = config.get("pipeline", {}).get("stages", {}).get(sid, {})
+        if stage_config.get("enabled") is False:
+            print(f"  [{sid}] SKIPPED (disabled by config)")
+            ctx.stage_results[sid] = StageResult(
+                stage_id=sid, status=StageStatus.SKIPPED
+            )
+            continue
+
         print(f"\n{'='*60}")
         print(f"[{sid.upper()}] {stage_cls.stage_name} ({stage_cls.owner})")
         print(f"{'='*60}")
@@ -143,6 +155,11 @@ def run_pipeline(ctx: PipelineContext, start_stage: str = "s1", end_stage: str =
             print(f"\n[FATAL] Stage {sid} FAILED. Pipeline stopped.")
             for err in result.errors:
                 print(f"  ❌ {err}")
+            return False
+
+        # After S2, check if normalized entries are empty
+        if sid == "s2" and len(ctx.normalized_entries) == 0:
+            print(f"\n[FATAL] S2 produced zero normalized entries. Pipeline stopped.")
             return False
 
         if sid == end_stage:
@@ -165,12 +182,12 @@ Examples:
         """,
     )
     parser.add_argument("--profile", "-p", required=True, help="Path to domain profile JSON")
-    parser.add_argument("--input", "-i", required=True, help="Path to raw_tags.json or CSV")
+    parser.add_argument("--input", "-i", required=True, help="Path to raw_tags.json")
     parser.add_argument("--config", "-c", default="config/factory_config.yaml", help="Path to factory_config.yaml")
     parser.add_argument("--stage", "-s", default="s1", help="Start stage (s1-s8)")
     parser.add_argument("--end-stage", "-e", default="s8", help="End stage (s1-s8)")
-    parser.add_argument("--work-dir", "-w", default="./work", help="Working directory for intermediate files")
-    parser.add_argument("--exports-dir", default="./exports", help="Output directory for frozen exports")
+    parser.add_argument("--work-dir", "-w", default=None, help="Working directory for intermediate files")
+    parser.add_argument("--exports-dir", default=None, help="Output directory for frozen exports")
     parser.add_argument("--skip-flash", action="store_true", help="Skip Flash-dependent stages (s2, s4, s5)")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs only, don't execute")
 
@@ -207,9 +224,10 @@ Examples:
         return
 
     # Setup context
-    work_dir = Path(args.work_dir)
+    factory_dir = Path(__file__).parent
+    work_dir = Path(args.work_dir) if args.work_dir else factory_dir / "work"
     work_dir.mkdir(parents=True, exist_ok=True)
-    exports_dir = Path(args.exports_dir)
+    exports_dir = Path(args.exports_dir) if args.exports_dir else factory_dir / "exports"
     exports_dir.mkdir(parents=True, exist_ok=True)
 
     ctx = PipelineContext(
@@ -234,7 +252,7 @@ Examples:
     print(f"[PIPELINE] Work dir: {work_dir}")
     print(f"[PIPELINE] Exports dir: {exports_dir}")
 
-    success = run_pipeline(ctx, start_stage=start, end_stage=end)
+    success = run_pipeline(ctx, config, start_stage=start, end_stage=end)
 
     # Summary
     print(f"\n{'='*60}")
