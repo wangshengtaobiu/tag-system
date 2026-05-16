@@ -31,6 +31,16 @@ class S8Freeze(BaseStage):
         t0 = time.time()
         result = StageResult(stage_id=self.stage_id, status=StageStatus.RUNNING)
 
+        # Load entries if not already loaded
+        if not self.ctx.normalized_entries:
+            for fname in ("stage5_aliases.json", "stage4_resolved.json", "stage2_normalized.json"):
+                fpath = self.ctx.work_dir / fname
+                if fpath.exists():
+                    print(f"[S8] Loading entries from {fpath}")
+                    data = self._load_json(fpath)
+                    self.ctx.normalized_entries = data.get("entries", [])
+                    break
+
         # Guard: no data to freeze
         if len(self.ctx.normalized_entries) == 0:
             result.status = StageStatus.FAILED
@@ -188,7 +198,7 @@ class S8Freeze(BaseStage):
                 "distinction": e.get("distinction", ""),
                 "parent_canonical_id": e.get("parent_canonical_id"),
                 "trusted_relations": [
-                    rel for rel in e.get("relation_candidates", [])
+                    rel for rel in (e.get("relation_candidates") or [])
                     if rel.get("type") in ("specialization_of", "role_pair", "opposite_of", "context_of")
                     and rel.get("confidence", 0) >= 0.85
                 ],

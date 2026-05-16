@@ -27,6 +27,21 @@ class S7RetrievalExport(BaseStage):
         result = StageResult(stage_id=self.stage_id, status=StageStatus.RUNNING)
         entries = self.ctx.normalized_entries
 
+        # Fallback
+        if not entries:
+            for fname in ("stage5_aliases.json", "stage4_resolved.json", "stage2_normalized.json"):
+                fpath = self.ctx.work_dir / fname
+                if fpath.exists():
+                    print(f"[S7] Loading entries from {fpath}")
+                    data = self._load_json(fpath)
+                    entries = data.get("entries", [])
+                    self.ctx.normalized_entries = entries
+                    break
+            if not entries:
+                result.status = StageStatus.FAILED
+                result.errors.append("No normalized entries found.")
+                return result
+
         retrieval_entries = build_retrieval_embeddings(entries)
 
         # Build facet indices

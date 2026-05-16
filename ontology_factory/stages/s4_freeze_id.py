@@ -74,6 +74,20 @@ class S4FreezeID(BaseStage):
         result = StageResult(stage_id=self.stage_id, status=StageStatus.RUNNING)
         entries = self.ctx.normalized_entries
 
+        # Fallback: load from S2 output if normalized_entries is empty
+        if not entries:
+            s2_path = self.ctx.work_dir / "stage2_normalized.json"
+            if s2_path.exists():
+                print(f"[S4] Loading normalized entries from {s2_path}")
+                with open(s2_path, "r", encoding="utf-8") as f:
+                    s2_data = self._load_json(s2_path)
+                entries = s2_data.get("entries", [])
+                self.ctx.normalized_entries = entries
+            else:
+                result.status = StageStatus.FAILED
+                result.errors.append("No normalized entries. Run S1-S2 first.")
+                return result
+
         fixes_applied = 0
         aliases_marked = 0
         depth_truncations = 0
@@ -106,7 +120,28 @@ class S4FreezeID(BaseStage):
             if cid and not validate_canonical_id(entry.get("canonical_id", cid)):
                 result.warnings.append(f"Invalid ID format after fixes: {name} → {entry.get('canonical_id')}")
 
-        # 5. Check for duplicate IDs
+        # 5. Auto-deduplicate: keep highest confidence entry, mark others as duplicates
+        cid_groups = {}
+        for entry in entries:
+            cid = entry.get("canonical_id", "")
+            if cid:
+                cid_groups.setdefault(cid, []).append(entry)
+
+        deduped = 0
+        for cid, group in cid_groups.items():
+            if len(group) > 1:
+                # Sort by confidence descending, keep first
+                group.sort(key=lambda e: e.get("confidence", 0), reverse=True)
+                primary = group[0]
+                for dup in group[1:]:
+                    dup["is_duplicate_of"] = primary.get("name", "")
+                    dup["canonical_id"] = ""  # Clear duplicate ID
+                    deduped += 1
+
+        if deduped:
+            print(f"[S4] Auto-deduplicated: {deduped} entries marked as duplicates")
+
+        # 6. Check for remaining duplicate IDs
         dups = count_duplicate_cids(entries)
         if dups:
             result.errors.append(f"DUPLICATE CANONICAL IDs after fixes: {dups}")

@@ -24,6 +24,21 @@ class S6Validate(BaseStage):
         result = StageResult(stage_id=self.stage_id, status=StageStatus.RUNNING)
         entries = self.ctx.normalized_entries
 
+        # Fallback
+        if not entries:
+            for fname in ("stage5_aliases.json", "stage4_resolved.json", "stage2_normalized.json"):
+                fpath = self.ctx.work_dir / fname
+                if fpath.exists():
+                    print(f"[S6] Loading entries from {fpath}")
+                    data = self._load_json(fpath)
+                    entries = data.get("entries", [])
+                    self.ctx.normalized_entries = entries
+                    break
+            if not entries:
+                result.status = StageStatus.FAILED
+                result.errors.append("No normalized entries found.")
+                return result
+
         validator = Validator(self.profile, self.config)
         report = validator.validate_all(entries, stage_id="s6")
 

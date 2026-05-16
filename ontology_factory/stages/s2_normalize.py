@@ -52,6 +52,19 @@ class S2Normalize(BaseStage):
             return result
 
         entries = self.ctx.raw_tags
+        # Fallback: if raw_tags don't have 'name' field, load from S1 output
+        if entries and "name" not in entries[0]:
+            inv_path = self.ctx.work_dir / "inventory_clean.json"
+            if inv_path.exists():
+                print(f"[S2] Raw entries lack 'name' field, loading from {inv_path}")
+                with open(inv_path, "r", encoding="utf-8") as f:
+                    inv_data = json.load(f)
+                entries = inv_data.get("entries", [])
+                self.ctx.raw_tags = entries
+            else:
+                result.status = StageStatus.FAILED
+                result.errors.append("S1 output not found. Run S1 first or provide data with 'name' field.")
+                return result
         batches = self._split_batches(entries)
         total_batches = len(batches)
         all_normalized = []
@@ -261,7 +274,7 @@ No markdown, no explanation, no wrapping text."""
         if st and st not in self.valid_semantic_types:
             errors.append(f"[{idx}] Invalid semantic_type: {st}")
 
-        for rel in entry.get("relation_candidates", []):
+        for rel in (entry.get("relation_candidates") or []):
             if rel.get("type") not in TRUSTED_RELATION_TYPES:
                 errors.append(f"[{idx}] Invalid relation type: {rel.get('type')}")
 

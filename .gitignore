@@ -16,13 +16,18 @@ venv/
 .qoder/
 
 # Ontology Factory — runtime artifacts
-work/
-exports/*
-!exports/.gitkeep
+**/work/
+**/exports/*
+!**/exports/.gitkeep
+
+# Source data (large, domain-specific)
+tag.json
+tag.json:Zone.Identifier
 
 # Secrets
 *.key
 .env
+*.api_key
 
 # OS
 .DS_Store

@@ -25,6 +25,20 @@ class S3Namespace(BaseStage):
         result = StageResult(stage_id=self.stage_id, status=StageStatus.RUNNING)
 
         entries = self.ctx.normalized_entries
+        # Fallback: load from S2 output if normalized_entries is empty
+        if not entries:
+            s2_path = self.ctx.work_dir / "stage2_normalized.json"
+            if s2_path.exists():
+                print(f"[S3] Loading normalized entries from {s2_path}")
+                with open(s2_path, "r", encoding="utf-8") as f:
+                    s2_data = json.load(f)
+                entries = s2_data.get("entries", [])
+                self.ctx.normalized_entries = entries
+            else:
+                result.status = StageStatus.FAILED
+                result.errors.append("S2 output not found. Run S2 first.")
+                return result
+
         profile_namespaces = self.profile.get("namespace_map", {})
 
         # Report current namespace distribution

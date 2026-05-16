@@ -32,6 +32,22 @@ class S5Alias(BaseStage):
         result = StageResult(stage_id=self.stage_id, status=StageStatus.RUNNING)
         entries = self.ctx.normalized_entries
 
+        # Fallback: load from S4 or S2 output if normalized_entries is empty
+        if not entries:
+            s4_path = self.ctx.work_dir / "stage4_resolved.json"
+            s2_path = self.ctx.work_dir / "stage2_normalized.json"
+            load_path = s4_path if s4_path.exists() else (s2_path if s2_path.exists() else None)
+            if load_path:
+                print(f"[S5] Loading entries from {load_path}")
+                with open(load_path, "r", encoding="utf-8") as f:
+                    data = self._load_json(load_path)
+                entries = data.get("entries", [])
+                self.ctx.normalized_entries = entries
+            else:
+                result.status = StageStatus.FAILED
+                result.errors.append("No normalized entries. Run S1-S4 first.")
+                return result
+
         # Already-processed aliases from S4
         existing_aliases = self.ctx.alias_graph
         alias_graph = dict(existing_aliases)
