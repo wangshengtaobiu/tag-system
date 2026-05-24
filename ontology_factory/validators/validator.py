@@ -265,7 +265,7 @@ class Validator:
 
         for name, check_fn, blocking in checks:
             passed, data = check_fn(entries)
-            detail = data.get("detail", f"{'PASSED' if passed else 'FAILED'} — {data.get('count', 0)} issues")
+            detail = data.get("detail", f"{'PASSED' if passed else 'FAILED'} — {data.get('count', data.get('total_alias_issues', data.get('issues', 0)))} issues")
             report.add_check(name, passed, detail=detail, data=data)
             if not passed and blocking:
                 report.add_critical(f"[{name}] {detail}")

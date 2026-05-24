@@ -134,9 +134,16 @@ class S4FreezeID(BaseStage):
                 group.sort(key=lambda e: e.get("confidence", 0), reverse=True)
                 primary = group[0]
                 for dup in group[1:]:
-                    dup["is_duplicate_of"] = primary.get("name", "")
-                    dup["canonical_id"] = ""  # Clear duplicate ID
-                    deduped += 1
+                    primary_name = primary.get("name", "")
+                    dup_name = dup.get("name", "")
+                    # Don't mark as duplicate if same name (identical entries)
+                    if primary_name == dup_name:
+                        dup["canonical_id"] = ""  # Clear duplicate ID
+                        deduped += 1
+                    else:
+                        dup["is_duplicate_of"] = primary_name
+                        dup["canonical_id"] = ""  # Clear duplicate ID
+                        deduped += 1
 
         if deduped:
             print(f"[S4] Auto-deduplicated: {deduped} entries marked as duplicates")
