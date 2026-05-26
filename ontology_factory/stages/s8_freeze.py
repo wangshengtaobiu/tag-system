@@ -199,8 +199,8 @@ class S8Freeze(BaseStage):
                 "parent_canonical_id": e.get("parent_canonical_id"),
                 "trusted_relations": [
                     rel for rel in (e.get("relation_candidates") or [])
-                    if rel.get("type") in ("specialization_of", "role_pair", "opposite_of", "context_of")
-                    and rel.get("confidence", 0) >= 0.85
+                    if (rel.get("type") if isinstance(rel, dict) else rel) in ("specialization_of", "role_pair", "opposite_of", "context_of")
+                    and (rel.get("confidence", 0) if isinstance(rel, dict) else 0) >= 0.85
                 ],
                 "embedding_text": e.get("embedding_text", ""),
                 "examples": e.get("examples", [])[:10],

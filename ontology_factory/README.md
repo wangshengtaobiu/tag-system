@@ -1,127 +1,152 @@
-# Ontology Factory — 标签本体标准化系统
+# Ontology Factory
 
-将原始、杂乱的标签目录，转化为**冻结的、机器可读的标准化本体**。
+Turns clean tags into a frozen, versioned ontology with canonical IDs, namespaces, validation, and retrieval export.
+
+## Pipeline
 
 ```
-原始标签（混乱、不一致）  →  标准化本体（唯一 ID、命名空间、层级）  →  检索索引（向量搜索就绪）
-"足控"                      fetish.foot_fetish                        bge 向量 → top-k 匹配
-"恋足"                      (上面的别名)
+S0 enrich (LLM) → S1 triage (script) → S2 normalize (LLM) → S3 namespace (script)
+→ S4 freeze ID (script) → S5 alias (script) → S6 validate (script)
+→ S7 retrieval (script) → S8 freeze (script)
 ```
 
----
+## Stages
 
-## 核心概念（大白话）
+| Stage | Name | Owner | Description |
+|-------|------|-------|-------------|
+| S0 | Tag Enrichment | Flash LLM | Reads acquisition output, generates semantic fields (category, definition, parent tag, distinction, examples). Writes Chinese keys for S1 compatibility. |
+| S1 | Inventory Triage | Script | Deduplication, empty name removal, language detection, field normalization. |
+| S2 | Semantic Normalization | Flash LLM | Assigns canonical_id, namespace, aliases, semantic type, confidence. Conservative mode: no translation, no expansion. |
+| S3 | Namespace Architecture | Script | Validates namespace assignments against domain profile. Freezes active namespaces. |
+| S4 | Canonical ID Freeze | Script | Applies architect fixes, truncates deep IDs, auto-deduplicates by confidence. |
+| S5 | Alias Collapse | Script | Builds alias graph, resolves parent references, rejects unsafe merges. |
+| S6 | Validation & Audit | Script | 7 deterministic checks: duplicate IDs, namespace consistency, alias integrity, parent cycles, max depth, relation whitelist, orphan tags. |
+| S7 | Retrieval Export | Script | Generates embedding_text, retrieval_aliases, facet indices (by namespace/category/type). |
+| S8 | Production Freeze | Script | Versioned ontology export, freeze manifest, migration map, deprecated IDs list. |
 
-| 概念 | 解释 |
-|------|------|
-| **本体（Ontology）** | 标签的"身份证系统"。每个标签获得唯一的 canonical_id，归属到明确的命名空间，带上定义、别名、层级关系。 |
-| **流水线（Pipeline）** | 8 个阶段自动处理：分拣 → 标准化 → 命名空间 → ID冻结 → 别名折叠 → 验证 → 导出 → 冻结。 |
-| **冻结（Freeze）** | 完成后产出一份"不可变"的标准化数据，下游系统可以永远依赖这些 ID，不会突然改变。 |
+**API calls**: Only S0 and S2 call the LLM API. S1, S3–S8 are deterministic scripts.
 
----
+## S0 Contract
 
-## 快速开始
+S0 bridges the gap between `tag_acquisition` output and the ontology pipeline:
+
+- **Input**: `[{"label": "腿控", "count": 42}, ...]`
+- **Output**: `[{"标签名": "腿控", "分类建议": "恋物偏好", "定义说明": "...", "上位tag": "...", "区别": "...", "文学示例词": "..."}, ...]`
+- S1 reads these Chinese keys directly — no additional normalization layer needed.
+
+S1–S8 are not modified by S0. They operate on the enriched data as-is.
+
+## Quick Start
 
 ```bash
-cd ontology_factory
-
-# 完整流水线（50 条标签，约 2-5 分钟）
-python run_factory.py \
+# Full pipeline (requires API key)
+export DEEPSEEK_API_KEY=YOUR_KEY
+python3 run_factory.py \
   --profile profiles/adult_profile.json \
-  --input ../tag.json
+  --input ../tests/data/acquisition/raw_30.json \
+  --stage s0 --end-stage s8
+
+# Skip S0 (use pre-enriched data)
+python3 run_factory.py \
+  --profile profiles/adult_profile.json \
+  --input ../tests/data/ontology/smoke_20.json \
+  --stage s1 --end-stage s8
+
+# Dry run (validate inputs only)
+python3 run_factory.py \
+  --profile profiles/adult_profile.json \
+  --input ../tests/data/acquisition/raw_30.json \
+  --stage s0 --end-stage s0 --dry-run
 ```
 
-运行成功后，结果在 `exports/` 目录下。
+## Outputs
 
----
+After a successful run:
 
-## 系统要求
+| File | Location | Description |
+|------|----------|-------------|
+| `ontology_export_v1_0_0.json` | `exports/` | Frozen ontology — canonical IDs, namespaces, definitions, aliases, confidence |
+| `retrieval_index.json` | `exports/` | Retrieval-ready entries with embedding_text and facet indices |
+| `validation_report.json` | `work/` | S6 check results (pass/fail per check, warnings) |
+| `freeze_manifest.json` | `work/ontology_versions/v1_0_0/` | Version metadata, checksums, immutability rules |
 
-| 要求 | 说明 |
-|------|------|
-| Python | 3.10+ |
-| 网络 | 能访问 `api.deepseek.com` |
-| 依赖 | `pip install requests pyyaml` |
-| API Key | DeepSeek API Key（配置在 `config/factory_config.yaml` 中） |
+### Ontology Export Format
 
-**不需要 GPU、不需要本地模型。** 全部走 DeepSeek 云端 API。
+Each entry in `ontology_export_v1_0_0.json`:
 
----
-
-## 常用命令
-
-| 场景 | 命令 |
-|------|------|
-| 完整流水线 | `python run_factory.py --profile profiles/adult_profile.json --input ../tag.json` |
-| 只校验输入不执行 | 加 `--dry-run` |
-| 跳过 AI 阶段（纯脚本） | 加 `--skip-flash` |
-| 从指定阶段开始 | 加 `--stage s4`（从 S4 开始） |
-| 到指定阶段结束 | 加 `--end-stage s6`（S6 后停止） |
-
----
-
-## 8 阶段流水线
-
+```json
+{
+  "canonical_id": "fetish.foot_fetish",
+  "original_name": "腿控",
+  "aliases": ["恋足"],
+  "namespace": "fetish",
+  "ontology_type": "flat_behavior",
+  "semantic_type": "preference",
+  "category": "恋物偏好",
+  "definition": "对女性腿部线条与触感的性偏好...",
+  "distinction": "与足控的区别：足控聚焦脚部,腿控关注腿部整体。",
+  "parent_canonical_id": null,
+  "trusted_relations": [],
+  "embedding_text": "",
+  "examples": ["丝滑腿部", "修长玉腿"],
+  "is_alias_of": null,
+  "confidence": 0.95,
+  "needs_review": false,
+  "v3_validated": true
+}
 ```
-S1 分拣(脚本) → S2 标准化(Flash) → S3 命名空间(Pro) → S4 ID冻结(Flash+Pro)
-→ S5 别名(Flash+Pro) → S6 验证(脚本) → S7 导出(脚本) → S8 冻结(脚本)
+
+### Retrieval Index Format
+
+Each entry in `retrieval_index.json`:
+
+```json
+{
+  "canonical_id": "fetish.foot_fetish",
+  "original_name": "腿控",
+  "namespace": "fetish",
+  "embedding_text": "腿控 | 恋足 | 对女性腿部线条与触感的性偏好...",
+  "semantic_summary": "对女性腿部（大腿、小腿）线条与触感的性偏好",
+  "retrieval_aliases": ["腿控", "恋足"],
+  "category": "恋物偏好",
+  "confidence": 0.95,
+  "v3_validated": true
+}
 ```
 
-| 阶段 | 干什么 | 需要 API？ |
-|------|--------|-----------|
-| S1 目录分拣 | 去重、清理空名、统一字段名 | 否 |
-| S2 语义标准化 | 调 Flash API 给每个标签分配 canonical_id、命名空间、语义类型 | **是** |
-| S3 命名空间架构 | 检查命名空间分配是否合理 | 否（纯校验） |
-| S4 ID 冻结 | 截断过深 ID、应用人工修正、检查重复 ID | 否 |
-| S5 别名折叠 | 合并同义词、构建别名图 | 否 |
-| S6 验证审计 | 9 项确定性检查（重复 ID、循环、深度等） | 否 |
-| S7 检索导出 | 生成向量检索就绪的索引 | 否 |
-| S8 生产冻结 | 打包版本化输出、生成冻结清单 | 否 |
+## Review Queue
 
-> **当前实现**：只有 S2 调用 DeepSeek API（Flash）。S3/S4/S5/S8 已简化为脚本处理，不再额外调 API。完整架构设计中这些阶段有人工/Pro 审查回路，但当前版本通过 S2 的高置信度输出 + S6 验证来保证质量。
+Low-confidence entries are flagged for manual review:
 
----
+- **Pending**: Awaiting human review
+- **Reviewed**: Human has examined, decision recorded
+- **Rejected**: Entry flagged as invalid, requires re-normalization
 
-## 运行结果
+Review items are saved to `work/stage{N}_review_queue.json`. Each item includes the entry, reason for flagging, and suggested action.
+
+## Configuration
+
+| File | Purpose |
+|------|---------|
+| `config/factory_config.yaml` | Pipeline config (batch sizes, timeouts, confidence thresholds, model routing) |
+| `profiles/adult_profile.json` | Domain profile (namespace map, semantic types, categories) |
+
+To use a different domain, create a new profile and pass `--profile profiles/your_domain.json`.
+
+## Directory Structure
 
 ```
 ontology_factory/
-├── exports/                          # ← 最终产物
-│   ├── ontology_export_v1_0_0.json   # 冻结的标准化本体（主文件）
-│   └── retrieval_index.json          # 检索索引（给下游打标系统用）
-└── work/                             # ← 中间产物（调试用）
-    ├── inventory_clean.json          # S1 清理后
-    ├── stage2_normalized.json        # S2 AI 标准化结果
-    ├── namespace_freeze.json         # S3 命名空间冻结
-    ├── stage4_resolved.json          # S4 ID 冻结后
-    ├── validation_report.json        # S6 验证报告
-    └── retrieval_index.json          # S7 检索索引
+├── run_factory.py              # Pipeline entry point
+├── stages/                     # S0–S8 implementations
+├── config/factory_config.yaml  # Pipeline configuration
+├── profiles/                   # Domain profiles
+├── validators/                 # Deterministic validation engine
+├── review_queue/               # Manual review interface
+├── exports/                    # Final outputs (gitignored)
+├── work/                       # Intermediate outputs (gitignored)
+├── metrics/                    # Observation data (gitignored)
+└── docs/
+    ├── 操作手册.md              # Operations manual (Chinese)
+    └── ontology_factory_design.md  # Design document
 ```
-
-- **`ontology_export_v1_0_0.json`**：每个标签的完整身份证——canonical_id、命名空间、定义、别名、层级关系、置信度。是"权威数据源"。
-- **`retrieval_index.json`**：把标签转成适合向量检索的格式（embedding_text、分面索引）。给下游"用这些 tag 给小说打标"的系统使用。
-
----
-
-## 目录结构
-
-```
-ontology_factory/
-├── run_factory.py              # 主入口
-├── config/factory_config.yaml  # 运行时配置（API、模型、阈值）
-├── profiles/
-│   └── adult_profile.json      # 成人标签领域的"地图"（命名空间、语义类型）
-├── stages/                     # 8 个阶段的代码
-├── validators/                 # 9 项验证检查
-├── review_queue/              # 人工审核队列工具
-├── docs/
-│   ├── 操作手册.md              # 完整操作指南
-│   └── ontology_factory_design.md  # Domain Profile 编写指南
-├── exports/                   # 输出目录
-├── work/                      # 中间产物目录
-└── README.md
-```
-
----
-
-**完整操作指南（环境搭建、配置详解、换领域）见 [docs/操作手册.md](docs/操作手册.md)**

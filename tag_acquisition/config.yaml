@@ -1,0 +1,95 @@
+# =============================================================================
+# Tag Acquisition — Configuration
+# =============================================================================
+
+# Pixiv network
+pixiv:
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  referer: "https://www.pixiv.net/"
+
+# Proxy settings (set to null to disable)
+proxy:
+  http: "${PROXY_HTTP:-http://172.21.192.1:7897}"
+  https: "${PROXY_HTTPS:-http://172.21.192.1:7897}"
+
+# Collection settings
+collection:
+  search_keywords:
+    - "扩张"
+    - "重口"
+    - "NTR"
+    - "SM"
+    - "痴女"
+    - "束缚"
+    - "人体改造"
+    - "自虐"
+    - "灌肠"
+    - "破坏"
+  pages_per_keyword: 10
+  request_delay: 2.0
+  timeout: 15
+  max_retries: 3
+  target_tag_count: 3000
+
+# Protected phrases (exact match, never split)
+protected_phrases:
+  - "父女丼"
+  - "SM調教"
+  - "SM调教"
+  - "NTR人妻"
+  - "逆NTR"
+  - "JK制服"
+  - "ASMR"
+  - "メス堕ち"
+  - "オホ声"
+  - "3P"
+  - "4P"
+  - "R18"
+  - "R18G"
+  - "NTR"
+  - "SM"
+  - "JK"
+
+# Blacklist (exact match, always reject)
+blacklist:
+  - "中文"
+  - "中国语"
+  - "中国語"
+  - "中文翻訳"
+  - "中国語翻訳"
+  - "小説"
+  - "小说"
+  - "小説版"
+  - "漫画版"
+  - "漫画"
+  - "イラスト"
+  - "男性向け"
+  - "女性向け"
+  - "腐向け"
+  - "一般向け"
+  - "二次創作"
+  - "同人"
+  - "原创"
+  - "オリジナル"
+  - "パロディ"
+  - "R18"
+  - "R-18"
+  - "R18G"
+  - "R-18G"
+  - "R15"
+  - "R-15"
+  - "AI"
+  - "AI生成"
+  - "タグ"
+  - "複数タグ"
+  - "単タグ"
+
+# Output
+output:
+  output_dir: "."
+
+# Versions
+versions:
+  schema_version: "v1"
+  split_rule: "v1"
+  blacklist_version: "v1"

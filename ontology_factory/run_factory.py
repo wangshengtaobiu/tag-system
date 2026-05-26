@@ -7,6 +7,7 @@ Usage:
     python run_factory.py --profile profiles/adult_profile.json --input raw_tags.json --stage s4
 
 Stages:
+    s0  Tag Enrichment (flash, batch LLM)
     s1  Inventory Triage (script, auto)
     s2  Semantic Normalization (flash, needs API key)
     s3  Namespace Architecture (pro, optional)
@@ -29,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from stages import PipelineContext, STAGE_REGISTRY, StageResult, StageStatus
+from stages.s0_enrich import S0Enrich
 from stages.s1_triage import S1Triage
 from stages.s2_normalize import S2Normalize
 from stages.s3_namespace import S3Namespace
@@ -109,8 +111,9 @@ def load_raw_tags(input_path: str) -> list[dict]:
 
 def run_pipeline(ctx: PipelineContext, config: dict, start_stage: str = "s1", end_stage: str = "s8") -> bool:
     """Run the pipeline from start_stage to end_stage."""
-    stage_order = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"]
+    stage_order = ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"]
     stage_map = {
+        "s0": S0Enrich,
         "s1": S1Triage,
         "s2": S2Normalize,
         "s3": S3Namespace,
@@ -188,7 +191,7 @@ Examples:
     parser.add_argument("--end-stage", "-e", default="s8", help="End stage (s1-s8)")
     parser.add_argument("--work-dir", "-w", default=None, help="Working directory for intermediate files")
     parser.add_argument("--exports-dir", default=None, help="Output directory for frozen exports")
-    parser.add_argument("--skip-flash", action="store_true", help="Skip Flash-dependent stages (s2, s4, s5)")
+    parser.add_argument("--skip-flash", action="store_true", help="Skip Flash-dependent stages (s0, s2, s4, s5)")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs only, don't execute")
 
     args = parser.parse_args()
@@ -240,9 +243,9 @@ Examples:
 
     # Handle skip-flash
     if args.skip_flash:
-        print("\n[CONFIG] Flash stages disabled. S2/S4/S5 will be skipped.")
+        print("\n[CONFIG] Flash stages disabled. S0/S2/S4/S5 will be skipped.")
         config.setdefault("pipeline", {}).setdefault("stages", {})
-        for sid in ["s2_normalize", "s4_freeze_id", "s5_alias"]:
+        for sid in ["s0_enrich", "s2_normalize", "s4_freeze_id", "s5_alias"]:
             config["pipeline"]["stages"].setdefault(sid, {})["enabled"] = False
 
     # Run pipeline

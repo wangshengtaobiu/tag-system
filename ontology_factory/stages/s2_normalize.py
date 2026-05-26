@@ -30,8 +30,8 @@ class S2Normalize(BaseStage):
         self.api_base = self.config.get("models", {}).get("flash", {}).get("api_base", "")
         self.api_key = self.config.get("models", {}).get("flash", {}).get("api_key", "")
         self.model = self.config.get("models", {}).get("flash", {}).get("model", "deepseek-v4-flash")
-        self.batch_size = self.config.get("pipeline", {}).get("stages", {}).get("s2_normalize", {}).get("batch_size", 50)
-        self.min_batch = self.config.get("pipeline", {}).get("stages", {}).get("s2_normalize", {}).get("min_batch", 10)
+        self.batch_size = self.config.get("pipeline", {}).get("stages", {}).get("s2_normalize", {}).get("batch_size", 3)
+        self.min_batch = self.config.get("pipeline", {}).get("stages", {}).get("s2_normalize", {}).get("min_batch", 2)
         self.max_retries = self.config.get("pipeline", {}).get("stages", {}).get("s2_normalize", {}).get("max_retries", 3)
         self.rate_limit_delay = self.config.get("pipeline", {}).get("stages", {}).get("s2_normalize", {}).get("rate_limit_delay", 1.0)
         self.timeout = self.config.get("pipeline", {}).get("stages", {}).get("s2_normalize", {}).get("timeout", 300)
@@ -160,32 +160,61 @@ class S2Normalize(BaseStage):
         return json.dumps({"tags": items}, ensure_ascii=False)
 
     def _build_prompt_text(self) -> str:
-        """Build the system prompt for normalization."""
+        """Build the system prompt for normalization — conservative, no drift."""
         ns_list = "\n".join(f"  - {ns}" for ns in sorted(self.valid_namespaces))
         st_list = "\n".join(f"  - {st}" for st in sorted(self.valid_semantic_types))
 
-        return f"""You are a tag ontology normalization system for Chinese adult content tags.
+        return f"""You are a conservative tag normalization system for Chinese adult content tags.
 
-### Allowed Namespaces (pick exactly one per tag):
-{ns_list}
-
-### Allowed Semantic Types (pick exactly one per tag):
-{st_list}
+Your goal is STABILITY, not cleverness.
 
 ### Rules:
-- canonical_id: format "namespace.descriptor" or "namespace.descriptor.detail" (snake_case, English, max 3 segments)
-- namespace MUST be from the allowed list above
-- semantic_type MUST be from the allowed list above
-- aliases: list of alternative names for the SAME concept
-- possible_duplicates: other tags in this batch that mean the SAME concept
-- parent_canonical_id: parent entry's canonical_id, or null
-- relation_candidates: only use types [specialization_of, role_pair, opposite_of, context_of]
-- confidence: 0.0-1.0
-- If confidence < 0.85, set needs_review=true with review_reason
 
-### Output:
-Return ONLY a JSON array. Each element must have: canonical_id, name, namespace, semantic_type, category, aliases, possible_duplicates, parent_canonical_id, relation_candidates, confidence, needs_review, review_reason.
-No markdown, no explanation, no wrapping text."""
+1. raw_tag is preserved as-is. Never translate or replace the original tag.
+
+2. canonical_zh (the "name" field) must be Simplified Chinese.
+   - Short, stable, community-standard form.
+   - For established abbreviations (NTR, SM, BDSM, TS, JK, OL), keep them as-is.
+   - Do NOT translate to English.
+   - Do NOT add explanations or sentences.
+
+3. aliases: ONLY include real equivalent names from the same concept.
+   - Must be actual alternative names used in real communities.
+   - Do NOT generate English translations.
+   - Do NOT generate synonyms, style words, or related concepts.
+   - If uncertain, leave aliases empty.
+   - When in doubt, do NOT add an alias.
+
+4. Do NOT infer or expand category/namespace/semantic_type beyond what the input provides.
+   - Use the input category if available.
+   - Pick namespace from the allowed list below — choose the most obvious match.
+   - If no clear match, set needs_review=true.
+
+5. When uncertain (ambiguous meaning, unclear language, possible duplicate, unsure canonical), set needs_review=true.
+   Do NOT guess.
+
+### Allowed Namespaces:
+{ns_list}
+
+### Allowed Semantic Types:
+{st_list}
+
+### Output format:
+Return ONLY a JSON array. Each element must have:
+canonical_id (format "namespace.descriptor", snake_case, English, max 2 segments),
+name (canonical_zh, Simplified Chinese),
+namespace (from allowed list),
+semantic_type (from allowed list),
+category (from input, or empty string),
+aliases (list of real equivalent names only, no English translations),
+possible_duplicates (other tags in this batch meaning the SAME thing),
+parent_canonical_id (parent or null),
+relation_candidates (only use: specialization_of, role_pair, opposite_of, context_of),
+confidence (0.0-1.0),
+needs_review (true/false),
+review_reason (only when needs_review=true).
+
+No markdown. No explanation. No wrapping text."""
 
     def _call_flash(self, batch_json: str, retry: int = 0) -> dict | None:
         """Call Flash API with retry logic."""
@@ -275,8 +304,14 @@ No markdown, no explanation, no wrapping text."""
             errors.append(f"[{idx}] Invalid semantic_type: {st}")
 
         for rel in (entry.get("relation_candidates") or []):
-            if rel.get("type") not in TRUSTED_RELATION_TYPES:
-                errors.append(f"[{idx}] Invalid relation type: {rel.get('type')}")
+            if isinstance(rel, dict):
+                rel_type = rel.get("type", "")
+            elif isinstance(rel, str):
+                rel_type = rel
+            else:
+                continue
+            if rel_type not in TRUSTED_RELATION_TYPES:
+                errors.append(f"[{idx}] Invalid relation type: {rel_type}")
 
         confidence = entry.get("confidence", 1.0)
         if confidence < self.auto_accept and not entry.get("needs_review"):
@@ -305,9 +340,129 @@ No markdown, no explanation, no wrapping text."""
                 else:
                     continue
 
-            # Validate entries
+            # Post-process: filter aliases to remove English translations
+            ESTABLISHED_ABBR = {"NTR", "SM", "BDSM", "TS", "JK", "OL", "R18", "R18G",
+                                "NTRN", "NTRH", "NTRR"}
+            COMMON_ROMAJI = {"netorare", "netori", "mesuochi", "mesudochi", "shibari",
+                             "kinbaku", "irumachio", "nakadashi", "okazukai", "sumata",
+                             "aizuchi", "bukkake", "gokkun", "paizuri", "tenga", "hentai",
+                             "ecchi", "yuri", "yaoi", "futanari", "tentacle", "ahegao"}
+            for entry in parsed:
+                raw_aliases = entry.get("aliases", [])
+                filtered = []
+                for alias in raw_aliases:
+                    # Keep if: contains CJK chars
+                    has_cjk = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" for c in alias)
+                    # Keep if: established abbreviation
+                    is_established_abbr = alias.upper() in ESTABLISHED_ABBR
+                    # Keep if: known romaji term
+                    is_romaji = alias.lower() in COMMON_ROMAJI
+                    # Keep if: underscore-style canonical (snake_case, single word)
+                    is_canonical_style = "_" in alias and " " not in alias
+                    # Reject: multi-word English phrases (e.g. "big breasts", "leg fetish")
+                    is_english_phrase = " " in alias and not has_cjk
+                    if is_english_phrase:
+                        continue
+                    if has_cjk or is_established_abbr or is_romaji or is_canonical_style:
+                        filtered.append(alias)
+                entry["aliases"] = filtered[:10]  # cap at 10
+
+            # Post-process: fix common namespace mistakes
+            for entry in parsed:
+                ns = entry.get("namespace", "")
+                if ns and ns not in self.valid_namespaces:
+                    # Try to find closest match by prefix
+                    for valid_ns in sorted(self.valid_namespaces):
+                        if ns.startswith(valid_ns) or valid_ns.startswith(ns):
+                            entry["namespace"] = valid_ns
+                            # Also fix canonical_id prefix
+                            cid = entry.get("canonical_id", "")
+                            if cid:
+                                parts = cid.split(".", 1)
+                                if len(parts) == 2:
+                                    entry["canonical_id"] = f"{valid_ns}.{parts[1]}"
+                            break
+
+            # CARDINALITY VALIDATOR: detect dropped/renamed tags
+            name_to_orig = {tag["name"]: tag for tag in batch}
+            input_names = {tag["name"] for tag in batch}
+            output_names = {entry.get("name", "") for entry in parsed}
+            missing_names = input_names - output_names
+            extra_names = output_names - input_names
+
+            if missing_names:
+                print(f"  CARDINALITY WARNING: {len(missing_names)} input tags missing in output: {sorted(missing_names)}")
+                # Try to match missing tags to renamed outputs (LLM may have translated)
+                # Build a mapping: for each missing tag, check if any output entry's aliases
+                # or possible_duplicates mention it
+                name_to_entry = {e.get("name"): e for e in parsed}
+                for missing in sorted(missing_names):
+                    # Check if any output entry has this missing name as an alias
+                    found_in_alias = None
+                    for entry in parsed:
+                        if missing in (entry.get("aliases") or []):
+                            found_in_alias = entry
+                            break
+                    if found_in_alias:
+                        # The tag was renamed but alias exists — add a separate entry
+                        print(f"    {missing} -> found as alias of {found_in_alias['name']}, creating separate entry")
+                        new_entry = {
+                            "canonical_id": found_in_alias["canonical_id"],
+                            "name": missing,
+                            "namespace": found_in_alias["namespace"],
+                            "semantic_type": found_in_alias["semantic_type"],
+                            "category": found_in_alias["category"],
+                            "aliases": [found_in_alias["name"]],
+                            "possible_duplicates": [found_in_alias["name"]],
+                            "parent_canonical_id": found_in_alias.get("parent_canonical_id"),
+                            "relation_candidates": [],
+                            "confidence": 0.5,
+                            "needs_review": True,
+                            "review_reason": f"LLM renamed '{missing}' to '{found_in_alias['name']}'. Keeping original as separate entry.",
+                        }
+                        parsed.append(new_entry)
+                    else:
+                        # Truly missing — create a placeholder entry with best-effort namespace
+                        orig_tag = name_to_orig.get(missing, {})
+                        print(f"    {missing} -> truly missing, creating review placeholder")
+                        # Try to infer namespace from category by matching against namespace labels
+                        category = orig_tag.get("category", "")
+                        inferred_ns = "meta_style"  # Safe fallback
+                        for valid_ns, ns_def in self.profile.get("namespace_map", {}).items():
+                            ns_label = ns_def.get("label", "").lower()
+                            if category and (category.lower() in ns_label or ns_label in category.lower()):
+                                inferred_ns = valid_ns
+                                break
+                        new_entry = {
+                            "canonical_id": f"{inferred_ns}.{missing}",
+                            "name": missing,
+                            "namespace": inferred_ns,
+                            "semantic_type": "unknown",
+                            "category": category,
+                            "aliases": [],
+                            "possible_duplicates": [],
+                            "parent_canonical_id": None,
+                            "relation_candidates": [],
+                            "confidence": 0.0,
+                            "needs_review": True,
+                            "review_reason": f"LLM dropped tag '{missing}' entirely. Manual normalization required.",
+                        }
+                        parsed.append(new_entry)
+
+            # Preserve definition/distinction/examples from input (LLM prompt doesn't request them back)
+            for entry in parsed:
+                orig = name_to_orig.get(entry.get("name", ""))
+                if orig:
+                    entry.setdefault("definition", orig.get("definition", "")[:150])
+                    entry.setdefault("distinction", orig.get("distinction", "")[:80])
+                    entry.setdefault("parent_name", orig.get("parent_name", ""))
+                    entry.setdefault("examples", orig.get("examples", []))
+
+            # Validate entries (skip placeholders created by cardinality validator)
             all_errors = []
             for idx, entry in enumerate(parsed):
+                if entry.get("confidence") == 0.0 and entry.get("needs_review") and "dropped" in str(entry.get("review_reason", "")):
+                    continue  # Skip placeholder validation
                 errors = self._validate_entry(entry, idx)
                 all_errors.extend(errors)
 

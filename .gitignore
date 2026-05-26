@@ -1,34 +1,83 @@
+# =============================================================================
+# tag-system — .gitignore (v0.1-stable)
+# =============================================================================
+# Policy: Only ignore runtime/cache/outputs/logs/metrics.
+# Never ignore: source code, docs, config, test data.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
 # Python
+# ---------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *.egg-info/
 dist/
+*.so
 
+# ---------------------------------------------------------------------------
 # Virtualenv
+# ---------------------------------------------------------------------------
 venv/
 .venv/
 
-# IDE
+# ---------------------------------------------------------------------------
+# IDE / Editor
+# ---------------------------------------------------------------------------
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Qoder
+# ---------------------------------------------------------------------------
+# Qoder (local IDE state — contains machine-specific paths)
+# ---------------------------------------------------------------------------
 .qoder/
 
-# Ontology Factory — runtime artifacts
-**/work/
-**/exports/*
-!**/exports/.gitkeep
+# ---------------------------------------------------------------------------
+# Ontology Factory — runtime outputs (reproducible from source + config)
+# ---------------------------------------------------------------------------
+ontology_factory/work/
+ontology_factory/exports/*
+!ontology_factory/exports/.gitkeep
 
-# Source data (large, domain-specific)
-tag.json
-tag.json:Zone.Identifier
+# ---------------------------------------------------------------------------
+# Ontology Factory — experiment metrics (not source code)
+# ---------------------------------------------------------------------------
+ontology_factory/metrics/
 
+# ---------------------------------------------------------------------------
+# Logs (pipeline output, no source value)
+# ---------------------------------------------------------------------------
+*.log
+
+# ---------------------------------------------------------------------------
+# Source data (large, domain-specific — pending release decision)
+# ---------------------------------------------------------------------------
+# TODO(decision): tag.json contains 1178 real adult content tags.
+# Options:
+#   A) Keep in repo (it's the project's demonstration dataset)
+#   B) Move to separate data/ directory outside main repo
+#   C) Keep but document that repo contains adult content
+ontology_factory/tag.json
+ontology_factory/tag.json:Zone.Identifier
+
+# ---------------------------------------------------------------------------
 # Secrets
+# ---------------------------------------------------------------------------
 *.key
 .env
 *.api_key
+*.secret
 
+# ---------------------------------------------------------------------------
 # OS
+# ---------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# ---------------------------------------------------------------------------
+# Local shell snapshots (Qoder session state)
+# ---------------------------------------------------------------------------
+*.shell-snapshot
