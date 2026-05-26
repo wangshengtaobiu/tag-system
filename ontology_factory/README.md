@@ -93,6 +93,41 @@ ontology_factory/
 
 ---
 
+## S0 Contract 阶段边界
+
+S0 是 tag_acquisition 与 ontology_factory 之间的桥梁。
+
+| 边界 | 说明 |
+|------|------|
+| tag_acquisition 的输出 | `[{label, count}]` — 干净的 surface form，无语义信息 |
+| S0 的职责 | 为每个原始 tag 补充语义字段：分类建议、定义说明、上位 tag、区别、示例词 |
+| S0 不做的事 | 不修改原始 label、不做翻译、不做别名合并 |
+| S1–S8 的前提 | 输入已经是 enriched 格式（`{标签名, 分类建议, 定义说明, ...}`），不再调 LLM 补充语义 |
+
+S0 是 pipeline 中唯一真正需要 AI 的阶段。S1–S8 中只有 S2 调 Flash 做标准化验证，其余全是脚本。
+
+---
+
+## Review Queue 审核队列
+
+当 pipeline 对某个条目的置信度不足时，会将其放入 review queue，等待人工确认。
+
+| 触发条件 | 说明 |
+|----------|------|
+| `confidence < 0.85` | 置信度低于自动接受阈值，标记为 needs_review |
+| `confidence < 0.70` | 低置信度，标记为 reject，需重新归一化 |
+| namespace 冲突 | 条目被分配到不合理的 namespace |
+| alias 合并存疑 | 别名图指向不确定 |
+
+**审核流程：**
+
+1. pipeline 运行结束后，review queue 生成 `review_queue.json`
+2. 人工逐项确认：接受 / 拒绝 / 修正
+3. 修正后的条目合并回 ontology，重新跑 S6 验证
+4. 审核完成后，review queue 清空，进入下一轮
+
+---
+
 ## 目录结构 Directory Structure
 
 ```
@@ -113,4 +148,4 @@ ontology_factory/
 
 ---
 
-**完整操作手册见 [docs/操作手册.md](docs/操作手册.md)**
+**完整操作手册见 [MANUAL.md](MANUAL.md)**
