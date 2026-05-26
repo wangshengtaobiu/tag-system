@@ -1,0 +1,12 @@
+# tag-system — minimal dependencies (v0.1-stable)
+#
+# Install: pip install -r requirements.txt
+#
+# Notes:
+# - No GPU, no ML frameworks (torch, faiss, etc.)
+# - S0/S2 stages call DeepSeek API via HTTP (requests)
+# - Config uses YAML (pyyaml)
+# - All other imports are Python stdlib
+
+requests>=2.28.0
+pyyaml>=6.0
