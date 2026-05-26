@@ -81,3 +81,6 @@ Desktop.ini
 # Local shell snapshots (Qoder session state)
 # ---------------------------------------------------------------------------
 *.shell-snapshot
+
+# Internal docs (agent workflow, planning debris, orchestration notes)
+docs/internal/

@@ -1,60 +1,66 @@
 # tag_acquisition
 
-Collects raw tags from external sources, normalizes surface forms, splits compound tags, filters noise, and exports a clean corpus.
+从外部源采集原始 tag，进行 surface form 归一化、复合 tag 拆分、噪声过滤，导出干净的语料库。
 
-## Pipeline
+## English Summary
+
+Collects raw tags from external sources, normalizes surface forms, splits compound tags, filters noise, and exports a clean corpus. No semantic enrichment or ontology construction happens here — that's handled by ontology_factory downstream.
+
+---
+
+## Pipeline 流水线
 
 ```
-Raw tags (from API or file)
+Raw tags (来自 API 或文件)
     ↓
-normalize    — surface cleanup, full-width → half-width, whitespace
+normalize    — surface 清理，全角 → 半角，空白整理
     ↓
-split        — protected phrase splitting ("足控・M属性" → 2 entries)
+split        — 保护短语拆分（"足控・M属性" → 2 条）
     ↓
-filter       — quality filter (length, noise patterns, blacklist)
+filter       — 质量过滤（长度、噪声模式、黑名单）
     ↓
-lang_detect  — language tagging (zh / jp / en / mixed)
+lang_detect  — 语言标记（zh / jp / en / mixed）
     ↓
-dedup        — surface-level deduplication
+dedup        — surface 级去重
     ↓
-snapshot     — append-only corpus export
+snapshot     — 追加式语料导出
 ```
 
 ### normalize
 
-Cleans surface form: trims whitespace, normalizes full-width characters to half-width, collapses repeated spaces. No semantic changes.
+清理 surface form：去除首尾空白、全角字符归一化为半角、合并多余空格。不做语义变更。
 
 ### split
 
-Splits compound tags using delimiter policy. Protected phrases (e.g., "NTR・寝取られ") are preserved as-is or split based on configuration. Rollback to original if split produces no valid entries.
+使用 delimiter policy 拆分复合 tag。保护短语（如 "NTR・寝取られ"）按配置保留或拆分。如果拆分后无有效条目，回滚到原始 tag。
 
 ### filter
 
-Removes entries that match noise patterns:
-- Too short (< 2 chars)
-- Too long (> 30 chars)
-- Matches blacklist entries
-- Fails quality heuristics (e.g., all numbers, random chars)
+移除匹配噪声模式的条目：
+- 过短（< 2 字符）
+- 过长（> 30 字符）
+- 匹配黑名单
+- 未通过质量启发式检查（如纯数字、随机字符）
 
 ### lang_detect
 
-Tags each entry with detected language: `zh`, `jp`, `en`, or `mixed`. Uses Unicode range analysis, not external libraries.
+为每条标记检测到的语言：`zh`、`jp`、`en` 或 `mixed`。使用 Unicode 范围分析，不依赖外部库。
 
 ### dedup
 
-Surface-level deduplication by normalized label. Keeps the first occurrence, logs duplicates.
+基于归一化 label 的 surface 级去重。保留首次出现，记录重复项。
 
 ### snapshot
 
-Exports clean corpus as append-only snapshot:
-- `corpus_v1_YYYYMMDD.jsonl` — one entry per line
-- Metadata: total entries, language distribution, filter stats
+以追加式快照导出干净语料：
+- `corpus_v1_YYYYMMDD.jsonl` — 每行一条
+- 元数据：总条目数、语言分布、过滤统计
 
 ---
 
-## Schema
+## Schema 数据结构
 
-Each entry in the output corpus:
+输出语料中每条条目：
 
 ```json
 {
@@ -63,14 +69,14 @@ Each entry in the output corpus:
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `label` | string | Normalized surface form |
-| `count` | int | Frequency / heat score (0 if unavailable) |
+| 字段 Field | 类型 Type | 说明 Description |
+|------------|-----------|------------------|
+| `label` | string | 归一化后的 surface form |
+| `count` | int | 频次 / 热度评分（无则为 0） |
 
 ---
 
-## Configuration
+## Configuration 配置
 
 `config.yaml`:
 
@@ -95,41 +101,41 @@ quality:
     - "^[a-zA-Z]{1,2}$"
 ```
 
-| Key | Description |
-|-----|-------------|
-| `protected_phrases` | Phrases that should NOT be split, even if they contain delimiters |
-| `delimiter_policy.chars` | Characters used to split compound tags |
-| `delimiter_policy.min_split_length` | Minimum length of each split part to be valid |
-| `blacklist` | Labels to exclude entirely |
-| `quality.min_length` | Minimum label length (chars) |
-| `quality.max_length` | Maximum label length (chars) |
-| `quality.noise_patterns` | Regex patterns for noise detection |
+| 配置 Key | 说明 |
+|----------|------|
+| `protected_phrases` | 即使包含分隔符也不应拆分的短语 |
+| `delimiter_policy.chars` | 用于拆分复合 tag 的分隔符 |
+| `delimiter_policy.min_split_length` | 拆分后每部分的最小有效长度 |
+| `blacklist` | 要完全排除的 label |
+| `quality.min_length` | label 最小长度（字符） |
+| `quality.max_length` | label 最大长度（字符） |
+| `quality.noise_patterns` | 噪声检测的正则表达式 |
 
 ---
 
-## Snapshot
+## Snapshot 快照机制
 
-Corpus snapshots are append-only:
+语料快照是追加式的：
 
 ```
 data/
-├── corpus_v1_20260520.jsonl   # Snapshot 1
-├── corpus_v1_20260525.jsonl   # Snapshot 2 (includes new entries)
-└── corpus_v1_latest.jsonl     # Symlink → latest snapshot
+├── corpus_v1_20260520.jsonl   # 快照 1
+├── corpus_v1_20260525.jsonl   # 快照 2（含新条目）
+└── corpus_v1_latest.jsonl     # 符号链接 → 最新快照
 ```
 
-**Rebuilding from raw cache:** Snapshots are derived from the raw tag cache. If a snapshot is corrupted, re-run the pipeline from the raw cache — no data is lost.
+**从原始缓存重建：** 快照从原始 tag 缓存派生。如果快照损坏，从原始缓存重新运行 pipeline 即可——不会丢失数据。
 
 ---
 
-## Quick Start
+## 快速开始 Quick Start
 
 ```bash
-# Process raw tags
+# 处理原始 tag
 python3 -m tag_acquisition.run --input tests/data/acquisition/raw_30.json
 
-# Process with custom config
+# 使用自定义配置
 python3 -m tag_acquisition.run --input raw_tags.json --config config.yaml
 ```
 
-Output: `work/corpus_v1_YYYYMMDD.jsonl`
+输出：`work/corpus_v1_YYYYMMDD.jsonl`
