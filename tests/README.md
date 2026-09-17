@@ -64,4 +64,10 @@ DEEPSEEK_API_KEY="sk-xxx" python3 ontology_factory/run_factory.py \
 ## 备注 Notes
 
 - `medium_200.json` (102KB) 及更大数据集未来可能移出仓库
+
+> **现状（已执行）**：`tests/data/acquisition/` 与 `tests/data/ontology/` 下的 5 个夹具
+> 已**撤出版本控制**——它们由真实小说衍生、含露骨片段，不适合公开仓库。
+> 文件仍在本机工作副本中；全新 clone 后需自行准备（或让测试在缺失时跳过）。
+> 注意：这些文件在既有提交历史中仍可读出，本次仅停止新克隆继续携带它们。
+> 另：`ontology_factory/profiles/adult_profile.json` 同样已撤出跟踪（成人领域分类结构）。
 - `tag.json` (1178 条, 645KB) 是完整生产数据集 — 已通过 `.gitignore` 排除
