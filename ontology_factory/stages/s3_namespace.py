@@ -81,7 +81,6 @@ class S3Namespace(BaseStage):
                 "categories": ns_def.get("categories", []),
                 "tag_count": ns_counts.get(ns_id, 0),
                 "max_depth": ns_def.get("max_depth", 3),
-                "ontology_type_hint": ns_def.get("ontology_type_hint", "any"),
                 "frozen": True,
                 "frozen_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }

@@ -14,7 +14,7 @@ from typing import Any
 
 from stages import (
     BaseStage, StageResult, StageStatus, register_stage, PipelineContext,
-    validate_canonical_id, TRUSTED_RELATION_TYPES,
+    validate_canonical_id, sanitize_canonical_id,
 )
 from review_queue.schema import make_review_item, ReviewType, Severity
 
@@ -104,7 +104,6 @@ class S2Normalize(BaseStage):
             "quality": {
                 "mean_confidence": mean_conf,
                 "needs_review": sum(1 for e in all_normalized if e.get("needs_review")),
-                "with_relations": sum(1 for e in all_normalized if e.get("relation_candidates")),
                 "with_aliases": sum(1 for e in all_normalized if e.get("aliases")),
             },
             "entries": all_normalized,
@@ -208,8 +207,6 @@ semantic_type (from allowed list),
 category (from input, or empty string),
 aliases (list of real equivalent names only, no English translations),
 possible_duplicates (other tags in this batch meaning the SAME thing),
-parent_canonical_id (parent or null),
-relation_candidates (only use: specialization_of, role_pair, opposite_of, context_of),
 confidence (0.0-1.0),
 needs_review (true/false),
 review_reason (only when needs_review=true).
@@ -226,6 +223,7 @@ No markdown. No explanation. No wrapping text."""
             ],
             "temperature": 0,
             "max_tokens": 8192,
+            "thinking": {"type": "disabled"},
         }
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -302,16 +300,6 @@ No markdown. No explanation. No wrapping text."""
         st = entry.get("semantic_type", "")
         if st and st not in self.valid_semantic_types:
             errors.append(f"[{idx}] Invalid semantic_type: {st}")
-
-        for rel in (entry.get("relation_candidates") or []):
-            if isinstance(rel, dict):
-                rel_type = rel.get("type", "")
-            elif isinstance(rel, str):
-                rel_type = rel
-            else:
-                continue
-            if rel_type not in TRUSTED_RELATION_TYPES:
-                errors.append(f"[{idx}] Invalid relation type: {rel_type}")
 
         confidence = entry.get("confidence", 1.0)
         if confidence < self.auto_accept and not entry.get("needs_review"):
@@ -414,8 +402,6 @@ No markdown. No explanation. No wrapping text."""
                             "category": found_in_alias["category"],
                             "aliases": [found_in_alias["name"]],
                             "possible_duplicates": [found_in_alias["name"]],
-                            "parent_canonical_id": found_in_alias.get("parent_canonical_id"),
-                            "relation_candidates": [],
                             "confidence": 0.5,
                             "needs_review": True,
                             "review_reason": f"LLM renamed '{missing}' to '{found_in_alias['name']}'. Keeping original as separate entry.",
@@ -441,8 +427,6 @@ No markdown. No explanation. No wrapping text."""
                             "category": category,
                             "aliases": [],
                             "possible_duplicates": [],
-                            "parent_canonical_id": None,
-                            "relation_candidates": [],
                             "confidence": 0.0,
                             "needs_review": True,
                             "review_reason": f"LLM dropped tag '{missing}' entirely. Manual normalization required.",
@@ -457,6 +441,14 @@ No markdown. No explanation. No wrapping text."""
                     entry.setdefault("distinction", orig.get("distinction", "")[:80])
                     entry.setdefault("parent_name", orig.get("parent_name", ""))
                     entry.setdefault("examples", orig.get("examples", []))
+
+            # Normalize every canonical_id into the frozen convention so that
+            # uppercase or CJK segments (placeholders, LLM glitches) never reach
+            # the frozen export.
+            for entry in parsed:
+                cid = entry.get("canonical_id", "")
+                if cid and not validate_canonical_id(cid):
+                    entry["canonical_id"] = sanitize_canonical_id(cid)
 
             # Validate entries (skip placeholders created by cardinality validator)
             all_errors = []

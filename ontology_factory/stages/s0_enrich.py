@@ -230,6 +230,7 @@ class S0Enrich(BaseStage):
             ],
             "temperature": 0,
             "max_tokens": 8192,
+            "thinking": {"type": "disabled"},
         }
         headers = {
             "Authorization": f"Bearer {self.api_key}",

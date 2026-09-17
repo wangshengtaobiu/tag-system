@@ -9,7 +9,7 @@ from typing import Any
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from stages import MAX_CANONICAL_ID_DEPTH, TRUSTED_RELATION_TYPES
+from stages import validate_canonical_id
 
 
 @dataclass
@@ -57,6 +57,34 @@ class Validator:
         return passed, {"duplicate_count": len(dups), "duplicates": dups, "detail": detail}
 
     # ------------------------------------------------------------------
+    # Check 1b: Empty Canonical ID (every primary entry must carry an ID)
+    # ------------------------------------------------------------------
+    def check_empty_canonical_id(self, entries: list[dict]) -> tuple[bool, dict]:
+        violations = [
+            {"name": e.get("original_name", e.get("name")), "namespace": e.get("namespace")}
+            for e in entries
+            if not (e.get("is_alias_of") or e.get("is_duplicate_of")) and not e.get("canonical_id")
+        ]
+        passed = len(violations) == 0
+        detail = ("ZERO empty canonical IDs" if passed
+                  else f"FOUND {len(violations)} primary entries without canonical_id")
+        return passed, {"violations": violations, "count": len(violations), "detail": detail}
+
+    # ------------------------------------------------------------------
+    # Check 1c: Canonical ID format (frozen convention)
+    # ------------------------------------------------------------------
+    def check_canonical_id_format(self, entries: list[dict]) -> tuple[bool, dict]:
+        violations = [
+            {"name": e.get("original_name", e.get("name")), "canonical_id": e.get("canonical_id")}
+            for e in entries
+            if e.get("canonical_id") and not validate_canonical_id(e["canonical_id"])
+        ]
+        passed = len(violations) == 0
+        detail = ("ZERO malformed canonical IDs" if passed
+                  else f"FOUND {len(violations)} malformed canonical IDs")
+        return passed, {"violations": violations, "count": len(violations), "detail": detail}
+
+    # ------------------------------------------------------------------
     # Check 2: Namespace Consistency
     # ------------------------------------------------------------------
     def check_namespace_consistency(self, entries: list[dict]) -> tuple[bool, dict]:
@@ -78,7 +106,10 @@ class Validator:
     def check_alias_integrity(self, entries: list[dict]) -> tuple[bool, dict]:
         aliased_names = {e.get("original_name", e.get("name")) for e in entries
                         if e.get("is_alias_of") or e.get("is_duplicate_of")}
-        primary_names = {e.get("original_name", e.get("name")) for e in entries}
+        # Primary = entries that are NOT aliases. Keeping alias names out of this
+        # set is what makes loop / missing-target detection meaningful.
+        primary_names = {e.get("original_name", e.get("name")) for e in entries
+                        if not (e.get("is_alias_of") or e.get("is_duplicate_of"))}
 
         loops = []
         missing_targets = []
@@ -104,53 +135,6 @@ class Validator:
             "missing_targets": missing_targets,
             "total_alias_issues": len(loops) + len(missing_targets),
         }
-
-    # ------------------------------------------------------------------
-    # Check 4: Parent Cycle Detection
-    # ------------------------------------------------------------------
-    def check_parent_cycles(self, entries: list[dict]) -> tuple[bool, dict]:
-        parent_map = {e.get("original_name", e.get("name", "")): e.get("parent_canonical_id")
-                      for e in entries}
-        cycles = []
-
-        for name in parent_map:
-            visited = []
-            current = name
-            while current and current in parent_map:
-                if current in visited:
-                    cycle_start = visited.index(current)
-                    cycle_path = visited[cycle_start:] + [current]
-                    cycles.append({"start_name": name, "cycle": cycle_path})
-                    break
-                visited.append(current)
-                current = parent_map[current]
-                if len(visited) > MAX_CANONICAL_ID_DEPTH + 3:
-                    break
-
-        passed = len(cycles) == 0
-        return passed, {"cycles": cycles, "count": len(cycles)}
-
-    # ------------------------------------------------------------------
-    # Check 5: Max Depth Violation
-    # ------------------------------------------------------------------
-    def check_max_depth(self, entries: list[dict]) -> tuple[bool, dict]:
-        parent_map = {e.get("original_name", e.get("name", "")): e.get("parent_canonical_id")
-                      for e in entries}
-        violations = []
-
-        for name in parent_map:
-            depth = 0
-            current = name
-            visited = set()
-            while current and current in parent_map and current not in visited:
-                visited.add(current)
-                current = parent_map[current]
-                depth += 1
-            if depth > MAX_CANONICAL_ID_DEPTH:
-                violations.append({"name": name, "depth": depth})
-
-        passed = len(violations) == 0
-        return passed, {"violations": violations, "count": len(violations)}
 
     # ------------------------------------------------------------------
     # Check 6: Confidence Distribution
@@ -188,61 +172,21 @@ class Validator:
         }
 
     # ------------------------------------------------------------------
-    # Check 7: Relation Type Whitelist
-    # ------------------------------------------------------------------
-    def check_relation_types(self, entries: list[dict]) -> tuple[bool, dict]:
-        violations = []
-        for e in entries:
-            for rel in e.get("trusted_relations", []):
-                if rel.get("type") not in TRUSTED_RELATION_TYPES:
-                    violations.append({
-                        "entry": e.get("original_name", e.get("name")),
-                        "relation_type": rel.get("type"),
-                        "target": rel.get("target"),
-                    })
-        passed = len(violations) == 0
-        return passed, {"violations": violations, "count": len(violations)}
-
-    # ------------------------------------------------------------------
     # Check 8: Semantic Type Validity
     # ------------------------------------------------------------------
     def check_semantic_types(self, entries: list[dict]) -> tuple[bool, dict]:
         violations = []
         for e in entries:
             st = e.get("semantic_type", "")
-            if st and st not in self.valid_semantic_types:
+            # "unknown" is the explicit sentinel emitted for review placeholders
+            # (tags the LLM dropped); it is carried as needs_review, not a violation.
+            if st and st not in self.valid_semantic_types and st != "unknown":
                 violations.append({
                     "name": e.get("original_name", e.get("name")),
                     "semantic_type": st,
                 })
         passed = len(violations) == 0
         return passed, {"violations": violations, "count": len(violations)}
-
-    # ------------------------------------------------------------------
-    # Check 9: Orphan Tags (all tags referenced)
-    # ------------------------------------------------------------------
-    def check_orphan_tags(self, entries: list[dict]) -> tuple[bool, dict]:
-        all_names = {e.get("original_name", e.get("name")) for e in entries}
-        referenced = set()
-
-        for e in entries:
-            for rel in e.get("trusted_relations", []):
-                referenced.add(rel.get("target", ""))
-                referenced.add(rel.get("target_canonical_id", ""))
-            if e.get("parent_canonical_id"):
-                # parent may reference by canonical_id rather than name
-                pass
-
-        # Aliases reference their primary
-        for e in entries:
-            target = e.get("is_alias_of") or e.get("is_duplicate_of")
-            if target:
-                referenced.add(target)
-
-        # This check is advisory — not blocking
-        orphans = all_names - referenced - {""}
-        passed = True  # Advisory only
-        return passed, {"orphans": list(orphans)[:50], "count": len(orphans)}
 
     # ------------------------------------------------------------------
     # Run All Checks
@@ -253,14 +197,12 @@ class Validator:
 
         checks = [
             ("duplicate_canonical_ids", self.check_duplicate_cids, True),
+            ("empty_canonical_id", self.check_empty_canonical_id, True),
+            ("canonical_id_format", self.check_canonical_id_format, True),
             ("namespace_consistency", self.check_namespace_consistency, True),
             ("alias_integrity", self.check_alias_integrity, True),
-            ("parent_cycles", self.check_parent_cycles, True),
-            ("max_depth_violation", self.check_max_depth, True),
             ("confidence_distribution", self.check_confidence_distribution, False),
-            ("relation_type_whitelist", self.check_relation_types, True),
             ("semantic_type_validity", self.check_semantic_types, False),
-            ("orphan_tags", self.check_orphan_tags, False),
         ]
 
         for name, check_fn, blocking in checks:

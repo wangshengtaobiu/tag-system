@@ -4,7 +4,7 @@
   "title": "Ontology Factory Domain Profile",
   "description": "Schema for domain profile configuration. This is the ONLY domain-specific file needed to adapt the Factory to a new domain.",
   "type": "object",
-  "required": ["domain", "namespaces", "semantic_types", "ontology_type_rules", "alias_policy", "retrieval_facets"],
+  "required": ["domain", "namespaces", "semantic_types", "alias_policy", "retrieval_facets"],
   "properties": {
     "domain": {
       "type": "object",

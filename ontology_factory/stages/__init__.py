@@ -19,8 +19,6 @@ from collections import Counter
 # Frozen Constants (F1-F10 invariants)
 # =============================================================================
 
-ONTOLOGY_TYPES = ("flat_behavior", "specialized_behavior", "graph_native", "meta_style")
-TRUSTED_RELATION_TYPES = ("specialization_of", "role_pair", "opposite_of", "context_of")
 MAX_CANONICAL_ID_DEPTH = 3
 CANONICAL_ID_PATTERN = r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)?$"
 
@@ -167,6 +165,33 @@ def validate_canonical_id(cid: str) -> bool:
     return bool(re.match(CANONICAL_ID_PATTERN, cid))
 
 
+def sanitize_canonical_id(cid: str) -> str:
+    """Coerce a canonical_id into the frozen convention.
+
+    Lowercases, replaces non-ASCII/invalid runs with "_", and falls back to a
+    stable hash slug for segments that would otherwise become empty (e.g. pure
+    CJK tag names from review placeholders).
+    """
+    import re
+    import hashlib
+
+    parts = []
+    for part in str(cid).split("."):
+        had_non_ascii = any(ord(c) > 127 for c in part)
+        seg = re.sub(r"[^a-z0-9_]+", "_", part.lower()).strip("_")
+        if had_non_ascii:
+            # Non-ASCII content (CJK) was dropped; keep any ASCII remnant but
+            # append a hash so distinct names never collapse to the same slug.
+            h = hashlib.md5(part.encode("utf-8")).hexdigest()[:8]
+            seg = f"{seg}_{h}" if seg else f"u_{h}"
+        if not seg:
+            seg = "u" + hashlib.md5(part.encode("utf-8")).hexdigest()[:8]
+        if not seg[0].isalpha():
+            seg = "u" + seg
+        parts.append(seg)
+    return ".".join(parts)
+
+
 def count_duplicate_cids(entries: list[dict]) -> dict[str, int]:
     """Count duplicate canonical IDs across primary entries."""
     primary = [e for e in entries if not (e.get("is_alias_of") or e.get("is_duplicate_of"))]
@@ -188,6 +213,9 @@ def build_retrieval_embeddings(entries: list[dict]) -> list[dict]:
     retrieval_entries = []
     for e in entries:
         if e.get("is_alias_of") or e.get("is_duplicate_of"):
+            continue
+        if not e.get("canonical_id"):
+            # An entry without a canonical_id cannot be retrieved or referenced.
             continue
 
         name = e.get("original_name", e.get("name", ""))
@@ -223,13 +251,10 @@ def build_retrieval_embeddings(entries: list[dict]) -> list[dict]:
             "namespace": e.get("namespace"),
             "semantic_type": e.get("semantic_type"),
             "category": e.get("category"),
-            "ontology_type": e.get("ontology_type"),
             "embedding_text": embedding_text,
             "semantic_summary": semantic_summary,
             "retrieval_aliases": [name] + aliases[:10],
             "candidate_expansion_terms": expansion_terms[:15],
-            "parent_canonical_id": e.get("parent_canonical_id"),
-            "trusted_relations": e.get("trusted_relations", []),
             "confidence": e.get("confidence", 0),
             "v3_validated": e.get("v3_validated", False),
         })

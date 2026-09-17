@@ -20,9 +20,9 @@ factory:
 # ---------------------------------------------------------------------------
 models:
   pro:
-    provider: "deepseek"
-    model: "deepseek-v4"
-    api_base: "${DEEPSEEK_API_BASE:-https://api.deepseek.com/v1}"
+    provider: "tokenrhythm"
+    model: "${PRO_MODEL:-deepseek-flash}"
+    api_base: "${DEEPSEEK_API_BASE:-https://tokenrhythm.studio/v1}"
     api_key: "${DEEPSEEK_API_KEY}"
     temperature: 0
     max_tokens: 4096
@@ -30,9 +30,9 @@ models:
     usage: "architect_review_only"
 
   flash:
-    provider: "deepseek"
-    model: "deepseek-v4-flash"
-    api_base: "${DEEPSEEK_API_BASE:-https://api.deepseek.com/v1}"
+    provider: "tokenrhythm"
+    model: "${FLASH_MODEL:-deepseek-flash}"
+    api_base: "${DEEPSEEK_API_BASE:-https://tokenrhythm.studio/v1}"
     api_key: "${DEEPSEEK_API_KEY}"
     temperature: 0
     max_tokens: 2048
@@ -67,7 +67,7 @@ pipeline:
       name: "Semantic Normalization"
       owner: "flash"
       auto: false
-      batch_size: 3
+      batch_size: 10
       min_batch: 2
       max_retries: 3
       timeout: 300

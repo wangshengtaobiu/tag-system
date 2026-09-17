@@ -7,6 +7,7 @@ Output: freeze_manifest.json, versioned exports, migration_map.json, deprecated_
 from __future__ import annotations
 
 import json
+import re
 import time
 import shutil
 import hashlib
@@ -33,7 +34,7 @@ class S8Freeze(BaseStage):
 
         # Load entries if not already loaded
         if not self.ctx.normalized_entries:
-            for fname in ("stage5_aliases.json", "stage4_resolved.json", "stage2_normalized.json"):
+            for fname in ("stage5_alias_resolved.json", "stage4_resolved.json", "stage2_normalized.json"):
                 fpath = self.ctx.work_dir / fname
                 if fpath.exists():
                     print(f"[S8] Loading entries from {fpath}")
@@ -46,6 +47,17 @@ class S8Freeze(BaseStage):
             result.status = StageStatus.FAILED
             result.errors.append("No normalized entries to freeze. Run S1-S5 first.")
             print("[S8] GATE FAILED: zero normalized entries")
+            return result
+
+        # Guard: every primary entry must carry a canonical_id before freezing
+        missing_ids = [e.get("name", e.get("original_name", ""))
+                       for e in self.ctx.normalized_entries
+                       if not (e.get("is_alias_of") or e.get("is_duplicate_of"))
+                       and not e.get("canonical_id")]
+        if missing_ids:
+            result.status = StageStatus.FAILED
+            result.errors.append(f"Primary entries missing canonical_id: {missing_ids[:10]}")
+            print(f"[S8] GATE FAILED: {len(missing_ids)} primary entries without canonical_id")
             return result
 
         # Verify all previous stages passed
@@ -101,9 +113,7 @@ class S8Freeze(BaseStage):
             "immutable": {
                 "canonical_ids": True,
                 "namespaces": True,
-                "ontology_types": True,
                 "max_depth": 3,
-                "relation_types": ["specialization_of", "role_pair", "opposite_of", "context_of"],
             },
             "mutable": {
                 "definitions": "Fix typos only",
@@ -117,7 +127,6 @@ class S8Freeze(BaseStage):
                 "delete_entries": "Deprecate instead",
                 "change_namespaces": "Never",
                 "merge_entries": "Never after freeze",
-                "change_ontology_type": "Never",
             },
         }
 
@@ -191,17 +200,10 @@ class S8Freeze(BaseStage):
                 "original_name": e.get("name", e.get("original_name")),
                 "aliases": e.get("aliases", []),
                 "namespace": e.get("namespace"),
-                "ontology_type": e.get("ontology_type", "flat_behavior"),
                 "semantic_type": e.get("semantic_type"),
                 "category": e.get("category"),
                 "definition": e.get("definition", ""),
                 "distinction": e.get("distinction", ""),
-                "parent_canonical_id": e.get("parent_canonical_id"),
-                "trusted_relations": [
-                    rel for rel in (e.get("relation_candidates") or [])
-                    if (rel.get("type") if isinstance(rel, dict) else rel) in ("specialization_of", "role_pair", "opposite_of", "context_of")
-                    and (rel.get("confidence", 0) if isinstance(rel, dict) else 0) >= 0.85
-                ],
                 "embedding_text": e.get("embedding_text", ""),
                 "examples": e.get("examples", [])[:10],
                 "is_alias_of": e.get("is_duplicate_of"),
@@ -214,7 +216,6 @@ class S8Freeze(BaseStage):
         # Quality stats
         primary = [e for e in export_entries if not e.get("is_alias_of")]
         from collections import Counter
-        onto_dist = Counter(e.get("ontology_type") for e in export_entries)
         cat_dist = Counter(e.get("category") for e in export_entries)
         alias_count = sum(1 for e in export_entries if e.get("is_alias_of"))
         mean_conf = round(sum(e.get("confidence", 0) for e in export_entries) / max(len(export_entries), 1), 3)
@@ -228,7 +229,6 @@ class S8Freeze(BaseStage):
                 "primary_entries": len(primary),
                 "alias_entries": alias_count,
                 "categories": len(cat_dist),
-                "total_trusted_relations": sum(len(e.get("trusted_relations", [])) for e in export_entries),
                 "review_queue_size": sum(1 for e in export_entries if e.get("needs_review")),
                 "architecture_version": "v3",
                 "router": "frozen (F1-F10 invariants)",
@@ -239,13 +239,11 @@ class S8Freeze(BaseStage):
             "quality": {
                 "duplicate_canonical_ids": 0,
                 "duplicate_details": {},
-                "missing_ontology_types": 0,
                 "missing_semantic_types": 0,
                 "mean_confidence": mean_conf,
             },
-            "categories": {cat: {"count": count, "ontology_type": "see entries", "v3_validated": True}
+            "categories": {cat: {"count": count, "v3_validated": True}
                           for cat, count in cat_dist.items()},
-            "ontology_type_distribution": dict(onto_dist),
             "entries": export_entries,
         }
 
@@ -270,7 +268,8 @@ class S8Freeze(BaseStage):
         if not self.versions_dir.exists():
             return
         versions = sorted(
-            [d for d in self.versions_dir.iterdir() if d.is_dir() and d.name.startswith("v_")],
+            [d for d in self.versions_dir.iterdir()
+             if d.is_dir() and re.match(r"^v\d", d.name)],
             key=lambda d: d.stat().st_mtime,
             reverse=True,
         )

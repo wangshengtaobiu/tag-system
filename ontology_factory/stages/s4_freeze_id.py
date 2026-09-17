@@ -12,7 +12,7 @@ from collections import Counter
 
 from stages import (
     BaseStage, StageResult, StageStatus, register_stage, PipelineContext,
-    validate_canonical_id, count_duplicate_cids,
+    validate_canonical_id, sanitize_canonical_id, count_duplicate_cids,
 )
 
 
@@ -91,21 +91,26 @@ class S4FreezeID(BaseStage):
         fixes_applied = 0
         aliases_marked = 0
         depth_truncations = 0
+        ids_repaired = 0
 
         for entry in entries:
             name = entry.get("name", entry.get("original_name", ""))
 
-            # 1. Apply architect fixes
-            if name in self.architect_fixes:
-                fix = self.architect_fixes[name]
+            # 1. Apply architect fixes (keyed by tag name, or by canonical_id
+            # when the same name covers more than one entry)
+            fix = self.architect_fixes.get(name)
+            if fix is None and entry.get("canonical_id"):
+                fix = self.architect_fixes.get(entry["canonical_id"])
+            if fix:
                 for key, value in fix.items():
                     if key != "reason":
                         entry[key] = value
                 fixes_applied += 1
 
-            # 2. Mark confirmed aliases
+            # 2. Mark confirmed aliases (an alias carries no canonical_id of its own)
             if name in self.true_aliases:
                 entry["is_duplicate_of"] = self.true_aliases[name]
+                entry["canonical_id"] = ""
                 aliases_marked += 1
 
             # 3. Truncate depth-4+ IDs
@@ -116,9 +121,15 @@ class S4FreezeID(BaseStage):
                     entry["canonical_id"] = ".".join(segments[:3])
                     depth_truncations += 1
 
-            # 4. Validate format
-            if cid and not validate_canonical_id(entry.get("canonical_id", cid)):
-                result.warnings.append(f"Invalid ID format after fixes: {name} → {entry.get('canonical_id')}")
+            # 4. Repair malformed IDs (uppercase, CJK, stray symbols) instead of
+            # only warning — a malformed ID must never reach the frozen export.
+            cur_cid = entry.get("canonical_id", "")
+            if cur_cid and not validate_canonical_id(cur_cid):
+                entry["canonical_id"] = sanitize_canonical_id(cur_cid)
+                ids_repaired += 1
+                result.warnings.append(
+                    f"Repaired malformed ID: {name} → {cur_cid} ⇒ {entry['canonical_id']}"
+                )
 
         # 5. Auto-deduplicate: keep highest confidence entry, mark others as duplicates
         cid_groups = {}
@@ -128,6 +139,7 @@ class S4FreezeID(BaseStage):
                 cid_groups.setdefault(cid, []).append(entry)
 
         deduped = 0
+        dropped_ids: set[int] = set()
         for cid, group in cid_groups.items():
             if len(group) > 1:
                 # Sort by confidence descending, keep first
@@ -136,17 +148,37 @@ class S4FreezeID(BaseStage):
                 for dup in group[1:]:
                     primary_name = primary.get("name", "")
                     dup_name = dup.get("name", "")
-                    # Don't mark as duplicate if same name (identical entries)
+                    dup["canonical_id"] = ""  # Clear duplicate ID
                     if primary_name == dup_name:
-                        dup["canonical_id"] = ""  # Clear duplicate ID
-                        deduped += 1
+                        # Same surface name (e.g. traditional/simplified variants
+                        # collapsed by normalization). Truly identical, so drop the
+                        # redundant copy rather than leave an ID-less primary entry.
+                        dropped_ids.add(id(dup))
                     else:
                         dup["is_duplicate_of"] = primary_name
-                        dup["canonical_id"] = ""  # Clear duplicate ID
-                        deduped += 1
+                    deduped += 1
+
+        if dropped_ids:
+            entries = [e for e in entries if id(e) not in dropped_ids]
+            print(f"[S4] Collapsed {len(dropped_ids)} identical same-name entries")
 
         if deduped:
             print(f"[S4] Auto-deduplicated: {deduped} entries marked as duplicates")
+
+        # 5b. Invariant: every primary entry must carry a canonical_id.
+        # Without this guard an ID-less primary silently reaches the frozen
+        # export and the retrieval index (as an empty FAISS id).
+        orphan_primary = [e.get("name", "") for e in entries
+                          if not (e.get("is_alias_of") or e.get("is_duplicate_of"))
+                          and not e.get("canonical_id")]
+        if orphan_primary:
+            result.errors.append(
+                f"Primary entries without canonical_id: {orphan_primary[:10]}"
+            )
+            result.status = StageStatus.FAILED
+            result.stats = {"total": len(entries), "orphan_primary": len(orphan_primary)}
+            print(f"[S4] GATE FAILED: {len(orphan_primary)} primary entries missing canonical_id")
+            return result
 
         # 6. Check for remaining duplicate IDs
         dups = count_duplicate_cids(entries)
@@ -158,6 +190,7 @@ class S4FreezeID(BaseStage):
                 "fixes_applied": fixes_applied,
                 "aliases_marked": aliases_marked,
                 "depth_truncations": depth_truncations,
+                "ids_repaired": ids_repaired,
                 "duplicate_ids": len(dups),
                 "duplicate_details": dups,
             }
@@ -210,6 +243,7 @@ class S4FreezeID(BaseStage):
             "fixes_applied": fixes_applied,
             "aliases_confirmed": aliases_marked,
             "depth_truncations": depth_truncations,
+            "ids_repaired": ids_repaired,
             "duplicate_ids": 0,
             "mean_confidence": mean_conf,
         }

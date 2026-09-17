@@ -202,3 +202,27 @@ docs/internal/
 #   *.yaml
 #   *.json schema/config files
 # =============================================================================
+# =============================================================================
+# Tagger — runtime artifacts and secrets
+# =============================================================================
+# Run caches (stage1/stage2/final jsonl can reach tens of GB)
+tagger/work/
+# Local API keys — never commit. Same policy as .env above.
+tagger/keys.txt
+
+# Retrieval index is DERIVED from the adult-domain ontology, so it follows the
+# same policy as ontology_factory/tag.json below. Rebuild with
+# ontology_factory/build_faiss_index.py.
+tagger/data/
+
+# =============================================================================
+# Adult-domain source data (harvested tag candidates, curated ontology, audits)
+# Same policy as ontology_factory/tag.json: kept out unless explicitly
+# publishing the dataset. The .py tooling under expansion/ IS tracked.
+# =============================================================================
+ontology_factory/input/
+ontology_factory/rebuild/
+ontology_factory/expansion/*.json
+ontology_factory/expansion/*.tsv
+ontology_factory/expansion/*.log
+ontology_factory/expansion/*.txt

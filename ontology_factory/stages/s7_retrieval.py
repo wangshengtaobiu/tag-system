@@ -29,7 +29,7 @@ class S7RetrievalExport(BaseStage):
 
         # Fallback
         if not entries:
-            for fname in ("stage5_aliases.json", "stage4_resolved.json", "stage2_normalized.json"):
+            for fname in ("stage5_alias_resolved.json", "stage4_resolved.json", "stage2_normalized.json"):
                 fpath = self.ctx.work_dir / fname
                 if fpath.exists():
                     print(f"[S7] Loading entries from {fpath}")

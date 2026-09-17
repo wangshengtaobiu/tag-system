@@ -10,12 +10,14 @@ Stages:
     s0  Tag Enrichment (flash, batch LLM)
     s1  Inventory Triage (script, auto)
     s2  Semantic Normalization (flash, needs API key)
-    s3  Namespace Architecture (pro, optional)
-    s4  Canonical ID Freeze (flash+pro)
-    s5  Alias Collapse (flash+pro)
+    s3  Namespace Architecture (script; design was pro review)
+    s4  Canonical ID Freeze (script; design was flash+pro)
+    s5  Alias Collapse (script; design was flash+pro)
     s6  Validation & Audit (script, auto)
     s7  Retrieval Export (script, auto)
-    s8  Production Freeze (pro)
+    s8  Production Freeze (script packaging; design was pro sign-off)
+
+Only S0 and S2 call the LLM; S1 and S3-S8 are deterministic scripts.
 """
 from __future__ import annotations
 
@@ -112,6 +114,14 @@ def load_raw_tags(input_path: str) -> list[dict]:
 def run_pipeline(ctx: PipelineContext, config: dict, start_stage: str = "s1", end_stage: str = "s8") -> bool:
     """Run the pipeline from start_stage to end_stage."""
     stage_order = ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"]
+    # Config keys are the long stage names (s0_enrich, ...), while the CLI and
+    # stage_order use short ids (s0, ...). Without this mapping the per-stage
+    # config (batch_size, rate_limit_delay, enabled) is never read.
+    stage_config_key = {
+        "s0": "s0_enrich", "s1": "s1_triage", "s2": "s2_normalize",
+        "s3": "s3_namespace", "s4": "s4_freeze_id", "s5": "s5_alias",
+        "s6": "s6_validate", "s7": "s7_retrieval", "s8": "s8_freeze",
+    }
     stage_map = {
         "s0": S0Enrich,
         "s1": S1Triage,
@@ -137,7 +147,8 @@ def run_pipeline(ctx: PipelineContext, config: dict, start_stage: str = "s1", en
             continue
 
         # Check if stage is disabled by config (e.g. --skip-flash)
-        stage_config = config.get("pipeline", {}).get("stages", {}).get(sid, {})
+        cfg_key = stage_config_key.get(sid, sid)
+        stage_config = config.get("pipeline", {}).get("stages", {}).get(cfg_key, {})
         if stage_config.get("enabled") is False:
             print(f"  [{sid}] SKIPPED (disabled by config)")
             ctx.stage_results[sid] = StageResult(
