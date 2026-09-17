@@ -230,3 +230,10 @@ ontology_factory/expansion/*.txt
 # Domain profile: adapters/config only; the file carries adult-domain taxonomy
 # structure so it stays out of the public repo (disk copy retained).
 ontology_factory/profiles/adult_profile.json
+
+# Test fixtures derived from real novels (contain explicit passages).
+# Deliberate exception to the "NEVER ignore test datasets" rule above: the repo
+# should not publish novel text. There is no test code referencing them today;
+# if tests are added, they must generate fixtures or skip when absent.
+tests/data/acquisition/
+tests/data/ontology/
