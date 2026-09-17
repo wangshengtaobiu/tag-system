@@ -226,3 +226,7 @@ ontology_factory/expansion/*.json
 ontology_factory/expansion/*.tsv
 ontology_factory/expansion/*.log
 ontology_factory/expansion/*.txt
+
+# Domain profile: adapters/config only; the file carries adult-domain taxonomy
+# structure so it stays out of the public repo (disk copy retained).
+ontology_factory/profiles/adult_profile.json
